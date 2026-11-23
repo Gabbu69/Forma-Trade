@@ -1,10 +1,12 @@
-# Forma Supply
+# Forma Trade
 
-Forma Supply is a local wholesale marketplace for workspace products. Retail buyers order packs in Philippine pesos. Each supplier manages its catalog, inventory, fulfillment queue, and sales chart.
+Forma Trade is a local wholesale marketplace for workspace products. Retail buyers order packs in Philippine pesos. Each supplier manages its catalog, inventory, fulfillment queue, and sales chart.
+
+![Forma Trade marketplace showing supplier products and wholesale pack prices](docs/marketplace.jpg)
 
 ## Windows quick start
 
-1. Install PHP 8.1 or newer with PDO MySQL and mbstring, and a Windows MariaDB distribution with the server and database initializer. PHP must be on PATH. This PC has PHP 8.5 and a working XAMPP MariaDB installation.
+1. Install PHP 8.1 or newer with PDO MySQL and mbstring, and a Windows MariaDB distribution with the server and database initializer. PHP must be on PATH.
 2. Double-click **start.cmd**. On first launch it creates the ignored local configuration, initializes a private database under `.runtime/mysql`, seeds the catalog, and starts the web server. Subsequent launches retain your orders. Allow the first initialization to finish.
 3. Open **http://127.0.0.1:8077/**. The catalog, images, Bootstrap, icons, and charts work offline.
 

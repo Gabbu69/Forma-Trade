@@ -7,7 +7,7 @@ $state=Join-Path $PSScriptRoot '.runtime'
 [void][IO.Directory]::CreateDirectory($state)
 function Secret { [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N') }
 if (!(Test-Path -LiteralPath '.env')) {
-    $localConfig="DB_HOST=127.0.0.1`nDB_PORT=33317`nDB_NAME=forma_supply`nDB_USER=forma_app`nDB_PASSWORD=$(Secret)`nAPP_DEBUG=false"
+    $localConfig="DB_HOST=127.0.0.1`nDB_PORT=33317`nDB_NAME=forma_trade`nDB_USER=forma_app`nDB_PASSWORD=$(Secret)`nAPP_DEBUG=false"
     [IO.File]::WriteAllText((Join-Path $PSScriptRoot '.env'),$localConfig)
     [IO.File]::WriteAllText((Join-Path $state 'db-admin'),(Secret))
 }
@@ -49,7 +49,7 @@ function AppReady {
     } catch { return $false }
 }
 if (AppReady) {
-    Write-Host "Forma Supply is already running at $url"
+    Write-Host "Forma Trade is already running at $url"
     if (!$NoBrowser) { Start-Process $url }
     exit 0
 }
@@ -61,7 +61,7 @@ try {
         Start-Sleep -Milliseconds 200
     }
     if ($server.HasExited -or !(AppReady)) { throw "Web startup failed. See .runtime/web-$Port.log or select another web port." }
-    Write-Host "Forma Supply is available at $url"
+    Write-Host "Forma Trade is available at $url"
     if (!$NoBrowser) { Start-Process $url }
     while (!$server.WaitForExit(500)) { }
 } finally {

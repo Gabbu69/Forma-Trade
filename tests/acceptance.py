@@ -209,7 +209,7 @@ def main():
     try:
         with tempfile.TemporaryDirectory(dir=ROOT/".runtime") as folder:
             config=Path(folder)/"test.env"
-            config.write_text((ROOT/".env").read_text().replace("DB_NAME=forma_supply","DB_NAME="+name))
+            config.write_text(re.sub(r"(?m)^DB_NAME=.*$", "DB_NAME="+name, (ROOT/".env").read_text(), count=1))
             env={**os.environ,"FORMA_ENV_FILE":str(config)}
             run("backend/setup.php",env=env)
             urls=[]

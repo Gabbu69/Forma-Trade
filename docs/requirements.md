@@ -1,4 +1,4 @@
-# Forma Supply requirements
+# Forma Trade requirements
 
 ## Audience and workflows
 
