@@ -1,4 +1,5 @@
 """Run against two temporary PHP servers and a new private MariaDB schema."""
+import csv
 import concurrent.futures
 import http.cookiejar
 import json
@@ -53,9 +54,11 @@ def scenarios(urls):
     guest = Client(urls[0])
     assert guest.opener.open(urls[0]+"/orders").geturl().startswith(urls[0]+"/login")
     guest.api("orders",status=401)
+    guest.api("vendor/sales/export",status=401)
     guest.api("cart",{"id":1,"quantity":1},status=403,csrf=False)
     buyer = guest.login("north")
     buyer.api("vendor/products",status=403)
+    buyer.api("vendor/sales/export",status=403)
     vendors = [Client(urls[0]).login("form"),Client(urls[1]).login("field")]
     form,field=vendors
     field.api("orders",status=403)
@@ -86,6 +89,15 @@ def scenarios(urls):
         assert revenue(v)==baseline[i][0]+float(own[0]["unit_price"])
         assert revenue(v,"month")==baseline[i][1]+float(own[0]["unit_price"])
     assert all(r["status"]=="fulfilled" for r in buyer.api("orders") if r["order_id"]==order)
+    for vendor in vendors:
+        for period in ["day", "month"]:
+            with vendor.opener.open(vendor.url+"/api/vendor/sales/export?period="+period) as response:
+                assert response.headers.get_content_type()=="text/csv"
+                report=list(csv.DictReader(response.read().decode().splitlines()))
+            expected=vendor.api("vendor/sales?period="+period)
+            assert [(r["period"],float(r["sales_php"])) for r in report]==[(r["date"],r["amount"]) for r in expected]
+        vendor.api("vendor/sales/export?period=bad",status=422)
+    print("PASS vendor-scoped daily and monthly CSVs match all chart buckets")
     print("PASS multi-vendor purchase, replay, independent fulfillment, buyer history and daily/monthly sales")
     new={**product,"name":"Acceptance sample","stock":1,"price":"17.25"}
     del new["id"]

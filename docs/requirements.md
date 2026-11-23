@@ -19,8 +19,14 @@ Prices are PHP currency amounts per pack stored as SQL decimals. The browser use
 
 Buyer order queries are scoped by buyer ID. Vendor fulfillment, product mutations, and analytics are scoped by vendor ID. Admin database provisioning is a CLI-only operation. Session authentication uses bcrypt, session ID regeneration, HTTP-only cookies, SameSite protection, and CSRF tokens on mutations. Templates escape text, and the browser constructs data-bearing elements with DOM text nodes.
 
+## Pack comparison and sales reports
+
+Buyers can open a product preview and change the number of packs to compare total units and cost. Each addition updates the server-side session in click order. The cart counter and product confirmation reflect the accepted quantity.
+
+The low-stock and awaiting-fulfillment metrics open filtered worklists. A vendor can switch back to all records. Downloadable daily and monthly CSV reports use the same vendor-scoped fulfilled sales calculation as the dashboard chart.
+
 ## Presentation and operation
 
-The catalog opens at the root URL. Its pale photo panels, graphite type, raised controls, and blue actions share styling with the cart, order history, and vendor workspace. Small viewports use a filter drawer and stacked order rows. Form controls have labels and focus indicators. Charts expose the same values as text. The database, images, libraries, and application all run locally for the defense.
+The catalog opens at the root URL. The appearance selector supports System, Light, and Dark, with a locally stored browser preference. Inter, icons, images, and chart libraries are bundled for offline use. Its pale photo panels, graphite type, raised controls, and blue actions share styling with the cart, order history, and vendor workspace. Small viewports use a filter drawer and stacked order rows. Form controls have labels and focus indicators. Charts expose the same values as text. The database, images, libraries, and application all run locally for the defense.
 
 Checkout records a purchase order in pesos. Fulfillment is tracked per supplier. The seed includes previously fulfilled orders and inventory counts as of the start of the demonstration.

@@ -31,6 +31,12 @@ Choose **Sign in → Use a demo account**, select an account, then sign in. All 
 4. Sign in as Field Objects. Its portion remains received. Fulfill it, then inspect the low-stock Lift Laptop Stand under **Inventory** and edit its alert threshold.
 5. Return to North Retail’s **Purchase orders** and find both fulfilled portions. Use the automated checks below to demonstrate a last-pack race and a price change without altering the presentation data.
 
+### Pack preview, appearance, and reporting
+
+Open the product photo or name to compare its pack price, units per pack, and unit cost. Choose the number of packs to see total units and the extended price. The confirmation includes a **View cart** link. The header’s **Appearance** selector offers System, Light, and Dark. The selection persists across the buyer and vendor workspaces on the same browser.
+
+In the vendor overview, select a metric to see only low-stock products or outstanding orders. Use **Show all** to restore the full list. After fulfilling an order, choose the daily or monthly interval and select **Download CSV**. Open the file and compare its peso amounts with **View sales figures**. Each report contains only the signed-in vendor’s fulfilled sales.
+
 ## Architecture and documentation
 
 The PHP front controller dispatches page and JSON routes through session, role, and CSRF checks. Catalog and purchase services use PDO prepared statements and InnoDB. Templates render the layout. Vanilla JavaScript fetches data and updates catalog cards, cart lines, order statuses, and Chart.js datasets. The router serves only approved static asset types under the static directory.
@@ -39,7 +45,7 @@ The PHP front controller dispatches page and JSON routes through session, role, 
 - [Database model and ER diagram](docs/data-model.md)
 - [JSON API reference](docs/api.md)
 - [SQL schema](backend/config/schema.sql) and [seed records](database_seed.sql)
-- Third-party libraries and license notices are in `static/vendor`. The bundled product and workspace photographs were generated for this demo.
+- The locally bundled Inter font and its license are in `static/fonts`. Third-party libraries and license notices are in `static/vendor`. The bundled product and workspace photographs were generated for this demo.
 
 ## Verification
 

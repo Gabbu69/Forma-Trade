@@ -30,9 +30,30 @@ function button(label, action, style = "secondary", attrs = {}) {
     label,
   );
 }
-function note(message) {
+function note(message, kind = "info") {
+  const toast = $("#notice");
+  toast.dataset.kind = kind;
+  toast
+    .querySelector(".notice-symbol")
+    .replaceChildren(icon(kind === "error" ? "circle-alert" : "check"));
   $("#noticeText").textContent = message;
-  bootstrap.Toast.getOrCreateInstance($("#notice"), { delay: 4200 }).show();
+  $("#noticeCart").hidden = kind !== "cart";
+  icons();
+  bootstrap.Toast.getOrCreateInstance(toast, { delay: 5500 }).show();
+}
+function busy(control, label) {
+  const original = [...control.childNodes];
+  control.disabled = true;
+  control.setAttribute("aria-busy", "true");
+  control.replaceChildren(
+    element("span", { class: "busy-dot", "aria-hidden": "true" }),
+    label,
+  );
+  return () => {
+    control.replaceChildren(...original);
+    control.disabled = false;
+    control.removeAttribute("aria-busy");
+  };
 }
 async function api(path, body, signal) {
   const options = { signal, headers: { Accept: "application/json" } };
@@ -46,7 +67,15 @@ async function api(path, body, signal) {
       },
       body: JSON.stringify(body),
     });
-  const response = await fetch("/api/" + path, options);
+  let response;
+  try {
+    response = await fetch("/api/" + path, options);
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
+    throw new Error(
+      "Connection interrupted. Check the local server, then try again.",
+    );
+  }
   const data = await response.json();
   if (!response.ok) {
     const error = new Error(data.error || "Please try again.");
@@ -96,8 +125,9 @@ function sum(items) {
 function packs(n) {
   return n + " " + (Number(n) === 1 ? "pack" : "packs");
 }
-let cart = { items: [] },
-  writingCart = false;
+let cart = { items: [] };
+let cartWrites = Promise.resolve();
+let pendingCartEdits = 0;
 function remember(data) {
   cart = data;
   if ($("#cartCount"))
@@ -106,23 +136,61 @@ function remember(data) {
       0,
     );
 }
-async function changeCart(id, quantity) {
-  if (writingCart) return;
-  writingCart = true;
+function queueCart(payload) {
+  const write = cartWrites.then(async () =>
+    remember(await api("cart", payload)),
+  );
+  cartWrites = write.catch(() => {});
+  return write;
+}
+async function changeCart(payload, focusId) {
+  const view = $("#cartView");
+  pendingCartEdits++;
+  view.setAttribute("aria-busy", "true");
+  if ($(".checkout")) $(".checkout").disabled = true;
   try {
-    remember(await api("cart", { id, quantity }));
-    if (page === "cart") renderCart();
-    else note("Added to your purchase cart.");
+    await queueCart(payload);
+    renderCart();
+    (document.getElementById(focusId) || view.querySelector("button,a"))?.focus(
+      { preventScroll: true },
+    );
   } catch (e) {
-    note(e.message);
+    note(e.message, "error");
   } finally {
-    writingCart = false;
+    pendingCartEdits--;
+    if (!pendingCartEdits) view.removeAttribute("aria-busy");
+    if ($(".checkout")) $(".checkout").disabled = Boolean(pendingCartEdits);
   }
 }
+async function addPacks(item, quantity) {
+  await queueCart({ id: item.id, delta: quantity });
+  note("Added " + packs(quantity) + " of " + item.name, "cart");
+}
 function productCard(item) {
-  const added = () => {
-    const current = cart.items.find((i) => i.id === item.id);
-    return changeCart(item.id, (current?.quantity || 0) + 1);
+  let pendingAdds = 0,
+    timer;
+  const feedback = element("p", { class: "card-error", role: "alert" });
+  const added = async () => {
+    clearTimeout(timer);
+    pendingAdds++;
+    add.dataset.feedback = "pending";
+    add.setAttribute("aria-busy", "true");
+    feedback.textContent = "";
+    let success = false;
+    try {
+      await addPacks(item, 1);
+      success = true;
+    } catch (error) {
+      feedback.textContent = error.message;
+      note(error.message, "error");
+    } finally {
+      if (--pendingAdds === 0) {
+        add.removeAttribute("aria-busy");
+        add.dataset.feedback = success ? "done" : "";
+        if (success)
+          timer = setTimeout(() => delete add.dataset.feedback, 1050);
+      }
+    }
   };
   const available = Number(item.stock) > 0;
   const add = button(icon("plus"), added, "add", {
@@ -134,8 +202,13 @@ function productCard(item) {
     "article",
     { class: "product-card" },
     element(
-      "div",
-      { class: "product-photo" },
+      "button",
+      {
+        type: "button",
+        class: "product-photo",
+        "aria-label": "Preview " + item.name,
+        click: (e) => openPreview(item, e.currentTarget),
+      },
       photo(item, ""),
       element(
         "span",
@@ -165,7 +238,15 @@ function productCard(item) {
           item.rating ?? "New",
         ),
       ),
-      element("h3", {}, item.name),
+      element(
+        "h3",
+        {},
+        button(
+          item.name,
+          (e) => openPreview(item, e.currentTarget),
+          "product-title",
+        ),
+      ),
       element(
         "div",
         { class: "pack-meta" },
@@ -183,16 +264,105 @@ function productCard(item) {
         ),
         add,
       ),
+      feedback,
     ),
   );
 }
+let previewItem, previewTrigger;
+function openPreview(item, trigger) {
+  previewItem = item;
+  previewTrigger = trigger;
+  $("#previewPhoto").src =
+    "/static/img/" + encodeURIComponent(item.image) + ".webp";
+  $("#previewPhoto").alt = item.name;
+  $("#previewSupplier").textContent = item.vendor;
+  $("#previewName").textContent = item.name;
+  $("#previewPrice").textContent = peso(item.price);
+  $("#previewSize").textContent = item.pack_size;
+  const cents = Math.round(Number(item.price) * 100);
+  $("#unitCostLabel").textContent =
+    cents % item.pack_size ? "Approx. unit cost" : "Unit cost";
+  $("#previewUnit").textContent = peso(
+    Math.round(cents / item.pack_size) / 100,
+  );
+  $("#previewStock").textContent = packs(item.stock);
+  const inCart = cart.items.find((p) => p.id === item.id)?.quantity || 0;
+  const limit = Math.max(0, Math.min(9999, Number(item.stock)) - inCart);
+  const qty = $("#previewQty");
+  qty.max = limit;
+  qty.value = limit ? 1 : 0;
+  qty.disabled = !limit;
+  $("#previewForm .form-error").textContent = limit
+    ? ""
+    : item.stock
+      ? "All available packs are in your cart."
+      : "This item is sold out.";
+  updatePreview();
+  bootstrap.Modal.getOrCreateInstance($("#packPreview")).show();
+}
+function updatePreview() {
+  const field = $("#previewQty"),
+    quantity = field.valueAsNumber;
+  const valid = !field.disabled && field.validity.valid;
+  $("#previewLess").disabled = !quantity || quantity <= 1;
+  $("#previewMore").disabled = field.disabled || quantity >= Number(field.max);
+  $("#previewUnits").textContent = valid
+    ? quantity * previewItem.pack_size + " units"
+    : "Select available packs";
+  $("#previewTotal").textContent = valid
+    ? peso((Math.round(Number(previewItem.price) * 100) * quantity) / 100)
+    : "—";
+  $("#previewAdd").disabled = !valid;
+}
+function initPreview() {
+  const qty = $("#previewQty"),
+    form = $("#previewForm");
+  qty.oninput = updatePreview;
+  $("#previewLess").onclick = () => {
+    qty.stepDown();
+    updatePreview();
+  };
+  $("#previewMore").onclick = () => {
+    qty.stepUp();
+    updatePreview();
+  };
+  $("#packPreview").addEventListener("hidden.bs.modal", () =>
+    previewTrigger?.focus({ preventScroll: true }),
+  );
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const quantity = qty.valueAsNumber;
+    if (!form.reportValidity() || qty.disabled) return;
+    const restore = busy($("#previewAdd"), "Adding packs…");
+    const modal = $("#packPreview");
+    const keepOpen = (event) => event.preventDefault();
+    modal.addEventListener("hide.bs.modal", keepOpen);
+    qty.disabled = true;
+    $("#previewLess").disabled = true;
+    $("#previewMore").disabled = true;
+    try {
+      await addPacks(previewItem, quantity);
+      modal.removeEventListener("hide.bs.modal", keepOpen);
+      bootstrap.Modal.getInstance(modal).hide();
+    } catch (error) {
+      form.querySelector(".form-error").textContent = error.message;
+    } finally {
+      modal.removeEventListener("hide.bs.modal", keepOpen);
+      restore();
+      qty.disabled = false;
+      updatePreview();
+    }
+  };
+}
 async function catalogPage() {
+  initPreview();
   const form = $("#filterForm"),
     list = $("#products");
   let pending, timer;
   async function filter() {
     pending?.abort();
     pending = new AbortController();
+    const signal = pending.signal;
     if (!form.reportValidity()) return;
     const params = new URLSearchParams(new FormData(form));
     if (
@@ -208,7 +378,8 @@ async function catalogPage() {
     params.set("q", $("#search").value.trim());
     params.set("sort", $("#sort").value);
     try {
-      const items = await api("catalog?" + params, undefined, pending.signal);
+      const items = await api("catalog?" + params, undefined, signal);
+      if (signal.aborted) return;
       list.replaceChildren(...items.map(productCard));
       if (!items.length)
         list.append(
@@ -233,6 +404,7 @@ async function catalogPage() {
     }
   }
   const schedule = () => {
+    pending?.abort();
     clearTimeout(timer);
     timer = setTimeout(filter, 140);
   };
@@ -241,6 +413,7 @@ async function catalogPage() {
   $("#sort").addEventListener("change", filter);
   form.addEventListener("submit", (event) => event.preventDefault());
   $("#reset").addEventListener("click", () => {
+    clearTimeout(timer);
     form.reset();
     $("#search").value = "";
     $("#sort").value = "";
@@ -278,8 +451,10 @@ function renderCart(message = "") {
         button(
           sign,
           async () => {
-            await changeCart(p.id, qty);
-            document.getElementById("qty-" + p.id + "-" + sign)?.focus();
+            await changeCart(
+              { id: p.id, delta: qty - p.quantity },
+              "qty-" + p.id + "-" + sign,
+            );
           },
           "",
           {
@@ -310,9 +485,14 @@ function renderCart(message = "") {
             step(p.quantity + 1, "Increase", "+"),
           ),
           element("strong", {}, peso(lineTotal(p) / 100)),
-          button(icon("trash-2"), () => changeCart(p.id, 0), "icon-btn", {
-            "aria-label": "Remove " + p.name,
-          }),
+          button(
+            icon("trash-2"),
+            () => changeCart({ id: p.id, quantity: 0 }),
+            "icon-btn",
+            {
+              "aria-label": "Remove " + p.name,
+            },
+          ),
         ),
       );
     }
@@ -349,22 +529,33 @@ function renderCart(message = "") {
         "Place purchase order",
         async (event) => {
           const btn = event.currentTarget;
-          btn.disabled = true;
+          if (pendingCartEdits) return;
+          const restore = busy(btn, "Placing order…");
+          for (const control of view.querySelectorAll(".cart-row button"))
+            control.disabled = true;
           try {
+            await cartWrites;
             const result = await api("checkout", { key: cart.key });
             location.assign("/orders?placed=" + result.order_id);
           } catch (e) {
-            try {
-              remember(await api("cart"));
-              renderCart(e.message);
-            } catch (refreshError) {
-              note(refreshError.message);
+            if (e.status === 409) {
+              try {
+                remember(await api("cart"));
+              } catch (refreshError) {
+                note(refreshError.message, "error");
+              }
             }
+            renderCart(
+              e.status
+                ? e.message
+                : "Order confirmation was interrupted. Retry to retrieve or place this same purchase order.",
+            );
+            $(".checkout")?.focus({ preventScroll: true });
           } finally {
-            btn.disabled = false;
+            restore();
           }
         },
-        "primary w-100",
+        "primary w-100 checkout",
       ),
     );
   view.replaceChildren(element("div", { class: "cart-layout" }, list, summary));
@@ -435,17 +626,26 @@ function renderOrders(rows, vendor = false) {
           button(
             status === "processing" ? "Start processing" : "Mark fulfilled",
             async (event) => {
-              event.currentTarget.disabled = true;
+              const restore = busy(event.currentTarget, "Updating…");
               try {
                 await api("vendor/orders", { id: row.group_id, status });
                 await loadVendor();
                 note("Fulfillment status updated.");
+                const nextAction = document.querySelector(
+                  '[data-group="' + row.group_id + '"]',
+                );
+                (nextAction || $("[data-tab=fulfillment]")).focus({
+                  preventScroll: true,
+                });
               } catch (e) {
-                note(e.message);
-                await loadVendor();
+                note(e.message, "error");
+                if (e.status === 409) await loadVendor();
+              } finally {
+                restore();
               }
             },
             "secondary mt-3",
+            { "data-group": row.group_id },
           ),
         );
       }
@@ -456,7 +656,9 @@ function renderOrders(rows, vendor = false) {
     host.append(box);
   }
 }
-function setTab(name) {
+function setTab(name, filtered = false) {
+  vendorFilter = filtered ? name : "";
+  renderVendorLists();
   for (const tab of document.querySelectorAll("[data-tab]")) {
     const active = tab.dataset.tab === name;
     tab.setAttribute("aria-pressed", String(active));
@@ -464,7 +666,9 @@ function setTab(name) {
   }
   if (name === "overview") chart?.resize();
 }
+let editorTrigger;
 function openProduct(p = null) {
+  editorTrigger = document.activeElement;
   editProduct = p;
   const form = $("#productForm");
   form.reset();
@@ -477,10 +681,93 @@ function openProduct(p = null) {
       form.elements.namedItem(key).value = value;
   bootstrap.Modal.getOrCreateInstance($("#productModal")).show();
 }
-async function loadSales() {
+function offerInventoryReview(form, latest) {
+  const feedback = form.querySelector(".form-error");
+  const changed = [...form.elements].filter(
+    (field) =>
+      field.name &&
+      String(latest[field.name]) !== String(editProduct[field.name]),
+  );
+  feedback.textContent =
+    "This product changed while you were editing. Review the current values before saving.";
+  const list = element("ul");
+  for (const field of changed) {
+    const label =
+      field.labels[0]?.firstChild?.textContent?.trim() || field.name;
+    list.append(
+      element(
+        "li",
+        {},
+        label +
+          " · Current: " +
+          latest[field.name] +
+          " · Your form: " +
+          field.value,
+      ),
+    );
+  }
+  feedback.append(
+    list,
+    button("Review and keep my edits", () => {
+      for (const field of changed) {
+        if (String(editProduct[field.name]) === field.value)
+          field.value = latest[field.name];
+      }
+      editProduct = latest;
+      feedback.textContent =
+        "Latest changes reviewed. Check your values, then save.";
+      form.elements.namedItem("name").focus();
+    }),
+  );
+}
+async function downloadSales(event) {
+  const restore = busy(event.currentTarget, "Downloading…");
   const period = $("#period").value;
-  const data = await api("vendor/sales?period=" + period);
-  if ($("#period").value !== period) return;
+  $("#period").disabled = true;
+  try {
+    const response = await fetch("/api/vendor/sales/export?period=" + period);
+    if (!response.ok) throw new Error((await response.json()).error);
+    const url = URL.createObjectURL(await response.blob());
+    const link = element("a", {
+      href: url,
+      download: "forma-sales-" + period + ".csv",
+    });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    note("Sales CSV downloaded.");
+  } catch (error) {
+    note(error.message + " Try downloading again.", "error");
+  } finally {
+    $("#period").disabled = false;
+    restore();
+  }
+}
+let salesRequest = 0,
+  displayedPeriod;
+async function loadSales() {
+  const request = ++salesRequest;
+  const select = $("#period"),
+    exportButton = $("#exportSales"),
+    panel = $(".chart-box");
+  const period = select.value;
+  exportButton.disabled = true;
+  panel.setAttribute("aria-busy", "true");
+  let data;
+  try {
+    data = await api("vendor/sales?period=" + period);
+  } catch (error) {
+    if (request !== salesRequest) return;
+    if (displayedPeriod) select.value = displayedPeriod;
+    exportButton.disabled = !displayedPeriod;
+    panel.removeAttribute("aria-busy");
+    throw error;
+  }
+  if (request !== salesRequest) return;
+  displayedPeriod = period;
+  exportButton.disabled = false;
+  panel.removeAttribute("aria-busy");
   $("#salesFigures").replaceChildren(
     ...data.map((d) =>
       element("div", { class: "status-line" }, d.label, peso(d.amount)),
@@ -515,12 +802,34 @@ async function loadSales() {
       },
     },
   });
+  recolorChart();
 }
+function recolorChart() {
+  if (!chart) return;
+  const style = getComputedStyle(document.documentElement);
+  const ink = style.getPropertyValue("--muted").trim(),
+    line = style.getPropertyValue("--line").trim();
+  for (const scale of Object.values(chart.options.scales)) {
+    scale.ticks.color = ink;
+    scale.grid.color = line;
+    scale.border.color = line;
+  }
+  chart.data.datasets[0].backgroundColor = style
+    .getPropertyValue("--blue")
+    .trim();
+  chart.update("none");
+}
+window.addEventListener("forma:appearance", recolorChart);
 async function loadVendor() {
   [vendorProducts, vendorOrders] = await Promise.all([
     api("vendor/products"),
     api("vendor/orders"),
   ]);
+  renderVendorLists();
+  await loadSales();
+}
+let vendorFilter = "";
+function renderVendorLists() {
   const pending = group(
     vendorOrders.filter((r) => r.status !== "fulfilled"),
     "group_id",
@@ -531,15 +840,24 @@ async function loadVendor() {
   const metric = (n, title, tab) =>
     button(
       element("span", {}, element("strong", {}, String(n)), title),
-      () => setTab(tab),
+      () => {
+        setTab(tab, true);
+        document.querySelector("[data-tab=" + tab + "]").focus();
+      },
       "panel metric-button",
     );
   $("#metrics").replaceChildren(
     metric(pending, "Orders awaiting fulfillment", "fulfillment"),
     metric(low, "Products at or below stock threshold", "inventory"),
   );
+  $("#inventoryFilter").hidden = vendorFilter !== "inventory";
+  $("#ordersFilter").hidden = vendorFilter !== "fulfillment";
+  const inventory =
+    vendorFilter === "inventory"
+      ? vendorProducts.filter((p) => Number(p.stock) <= Number(p.low_threshold))
+      : vendorProducts;
   $("#inventoryView").replaceChildren(
-    ...vendorProducts.map((p) =>
+    ...inventory.map((p) =>
       element(
         "article",
         { class: "inv-item" },
@@ -568,18 +886,36 @@ async function loadVendor() {
       ),
     ),
   );
-  renderOrders(vendorOrders, true);
-  await loadSales();
+  if (!inventory.length)
+    $("#inventoryView").append(
+      empty(
+        "No matching products",
+        vendorFilter === "inventory"
+          ? "All products are above their stock threshold."
+          : "Add a product to start your catalog.",
+      ),
+    );
+  const orders =
+    vendorFilter === "fulfillment"
+      ? vendorOrders.filter((r) => r.status !== "fulfilled")
+      : vendorOrders;
+  renderOrders(orders, true);
+  if (!orders.length && vendorFilter === "fulfillment")
+    $("#ordersView").replaceChildren(
+      empty("All caught up", "There are no orders awaiting fulfillment."),
+    );
   icons();
 }
 async function init() {
   icons();
-  $("#logout")?.addEventListener("click", async () => {
+  $("#logout")?.addEventListener("click", async (e) => {
+    const restore = busy(e.currentTarget, "Signing out…");
     try {
       await api("logout", {});
       location.assign("/");
     } catch (e) {
-      note(e.message);
+      restore();
+      note(e.message, "error");
     }
   });
   if (page === "catalog") await catalogPage();
@@ -611,7 +947,7 @@ async function init() {
     form.onsubmit = async (e) => {
       e.preventDefault();
       const btn = form.querySelector("button");
-      btn.disabled = true;
+      const restore = busy(btn, "Signing in…");
       try {
         const user = await api("login", Object.fromEntries(new FormData(form)));
         const next = new URLSearchParams(location.search).get("next");
@@ -624,7 +960,7 @@ async function init() {
         );
       } catch (err) {
         form.querySelector(".form-error").textContent = err.message;
-        btn.disabled = false;
+        restore();
       }
     };
   }
@@ -632,13 +968,28 @@ async function init() {
     document
       .querySelectorAll("[data-tab]")
       .forEach((tab) => (tab.onclick = () => setTab(tab.dataset.tab)));
+    $("#inventoryFilter button").onclick = () => {
+      setTab("inventory");
+      $("[data-tab=inventory]").focus();
+    };
+    $("#ordersFilter button").onclick = () => {
+      setTab("fulfillment");
+      $("[data-tab=fulfillment]").focus();
+    };
+    $("#exportSales").onclick = downloadSales;
+    $("#productModal").addEventListener("hidden.bs.modal", () => {
+      if (editorTrigger?.isConnected) editorTrigger.focus();
+      else $("#addProduct").focus();
+    });
     $("#addProduct").onclick = () => openProduct();
-    $("#period").onchange = () => loadSales().catch((e) => note(e.message));
+    $("#period").onchange = () =>
+      loadSales().catch((e) => note(e.message, "error"));
     $("#productForm").onsubmit = async (e) => {
       e.preventDefault();
       const form = e.currentTarget,
-        btn = form.querySelector("button");
-      btn.disabled = true;
+        btn = form.querySelector('button[type="submit"]');
+      const restore = busy(btn, "Saving product…");
+      form.querySelector(".form-error").textContent = "";
       const data = Object.fromEntries(new FormData(form));
       if (editProduct)
         Object.assign(data, {
@@ -648,16 +999,31 @@ async function init() {
       try {
         await api("vendor/products", data);
         bootstrap.Modal.getInstance($("#productModal")).hide();
-        await loadVendor();
         note("Product saved.");
+        try {
+          await loadVendor();
+        } catch {
+          note(
+            "Product saved. Reload the workspace to refresh inventory.",
+            "error",
+          );
+        }
       } catch (err) {
         form.querySelector(".form-error").textContent = err.message;
-        if (err.status === 409) await loadVendor();
+        if (err.status === 409) {
+          try {
+            await loadVendor();
+            const latest = vendorProducts.find((p) => p.id === editProduct.id);
+            if (latest) offerInventoryReview(form, latest);
+          } catch (refreshError) {
+            note(refreshError.message, "error");
+          }
+        }
       } finally {
-        btn.disabled = false;
+        restore();
       }
     };
     await loadVendor();
   }
 }
-init().catch((error) => note(error.message));
+init().catch((error) => note(error.message, "error"));

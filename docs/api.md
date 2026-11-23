@@ -8,7 +8,7 @@ All paths below start with `/api/`. Use the same session cookie for each request
 | POST login | Public | email, password. Returns id, name, email, role. |
 | POST logout | Signed-in session | Empty object. Ends session and returns ok. |
 | GET cart | Guest or buyer | Returns items with quoted prices and quantities, plus checkout key. |
-| POST cart | Guest or buyer | id and absolute quantity in packs. Zero removes a line. Returns refreshed cart and key. |
+| POST cart | Guest or buyer | id with either an absolute quantity or a signed delta in packs. A delta is applied to the current session quantity while the session is locked. Zero removes a line. Returns refreshed cart and key. |
 | POST checkout | Buyer | key from latest cart. Returns order_id. A repeated completed key returns the original ID. |
 | GET orders | Buyer | Purchase lines with order_id, group_id, vendor, buyer, fulfillment status, creation date, historical pack terms and quantity. |
 | GET vendor/products | Vendor | The caller’s products and edit versions. |
@@ -16,6 +16,8 @@ All paths below start with `/api/`. Use the same session cookie for each request
 | GET vendor/orders | Vendor | Order lines scoped to the caller’s fulfillment groups. |
 | POST vendor/orders | Vendor | id of the fulfillment group and next status, processing or fulfilled. Returns updated lines. |
 | GET vendor/sales | Vendor | period=day or month. Returns ordered date, label and amount buckets. |
+
+The vendor-only `GET /api/vendor/sales/export?period=day|month` downloads the same aggregated buckets as the sales chart. The UTF-8 CSV includes the columns `period` and `sales_php`. Dates use YYYY-MM-DD for daily totals and YYYY-MM for monthly totals.
 
 The API returns 401 for unauthenticated protected calls, 403 for forbidden roles, ownership or CSRF, 404 for missing endpoints, 405 for unsupported methods, 409 for business conflicts and 422 for invalid fields. Protected HTML routes redirect guests to sign in. After a checkout conflict, reload the cart to obtain the current quote and key. An inventory version conflict requires reopening the product before saving.
 

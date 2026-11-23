@@ -13,3 +13,18 @@
 <label class="stock-filter"><input name="stock" type="checkbox" value="1"> In stock only</label></form>
 <button class="primary d-lg-none w-100 mt-3" data-bs-dismiss="offcanvas" data-bs-target="#filters">Show products</button></div></aside>
 <div id="products" class="product-grid" aria-label="Products"></div></div></section>
+<div class="modal fade" id="packPreview" tabindex="-1" aria-labelledby="previewName">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-header"><span class="supplier">Pack details</span><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close pack preview"></button></div>
+    <div class="modal-body preview-layout">
+      <img id="previewPhoto" alt="">
+      <div class="preview-info">
+        <p class="supplier" id="previewSupplier"></p><h2 id="previewName"></h2>
+        <dl class="pack-facts"><div><dt>Pack price</dt><dd id="previewPrice"></dd></div><div><dt>Units per pack</dt><dd id="previewSize"></dd></div><div><dt id="unitCostLabel">Unit cost</dt><dd id="previewUnit"></dd></div><div><dt>Available stock</dt><dd id="previewStock"></dd></div></dl>
+        <form id="previewForm"><label for="previewQty">Packs to add</label><div class="quantity pack-step"><button type="button" id="previewLess" aria-label="One fewer pack">−</button><input id="previewQty" type="number" min="1" step="1" required><button type="button" id="previewMore" aria-label="One more pack">+</button></div>
+        <div class="pack-totals" aria-live="polite"><span id="previewUnits"></span><strong id="previewTotal"></strong></div>
+        <p class="form-error" role="alert"></p><button id="previewAdd" class="primary w-100" type="submit">Add to cart</button></form>
+      </div>
+    </div>
+  </div></div>
+</div>

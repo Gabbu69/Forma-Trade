@@ -25,7 +25,7 @@ try {
         $method=$_SERVER['REQUEST_METHOD']; $body=[];
         $routes=['/api/catalog'=>['GET',null],'/api/login'=>['POST',null],'/api/logout'=>['POST',null],
             '/api/cart'=>['GET,POST','shopping'],'/api/checkout'=>['POST','buyer'],'/api/orders'=>['GET','buyer'],
-            '/api/vendor/products'=>['GET,POST','vendor'],'/api/vendor/orders'=>['GET,POST','vendor'],'/api/vendor/sales'=>['GET','vendor']];
+            '/api/vendor/products'=>['GET,POST','vendor'],'/api/vendor/orders'=>['GET,POST','vendor'],'/api/vendor/sales'=>['GET','vendor'],'/api/vendor/sales/export'=>['GET','vendor']];
         [$methods,$role]=$routes[$path]??reject(404,'Endpoint unavailable.');
         if (!in_array($method,explode(',',$methods),true)) reject(405,'Unsupported request method.');
         if ($role==='shopping' && isset($_SESSION['user'])) Access::role('buyer');
@@ -47,7 +47,19 @@ try {
             case '/api/orders': jsonOut($purchases->history($user));
             case '/api/vendor/products': jsonOut($method==='POST'?['id'=>$catalog->save($user['id'],$body)]:$catalog->products([],$user['id']));
             case '/api/vendor/orders': if ($method==='POST') $purchases->advance($user['id'],$body); jsonOut($purchases->history($user));
-            case '/api/vendor/sales': jsonOut($purchases->sales($user['id'],$_GET['period']??'day'));
+            case '/api/vendor/sales':
+            case '/api/vendor/sales/export':
+                $period=$_GET['period']??'day';
+                if (!in_array($period,['day','month'],true)) reject(422,'Choose the daily or monthly sales period.');
+                $rows=$purchases->sales($user['id'],$period);
+                if ($path==='/api/vendor/sales') jsonOut($rows);
+                header('Content-Type: text/csv; charset=utf-8');
+                header('Content-Disposition: attachment; filename="forma-sales-'.$period.'.csv"');
+                $output=fopen('php://output','w');
+                fputcsv($output,['period','sales_php'],',','"','');
+                foreach ($rows as $row) fputcsv($output,[$row['date'],number_format($row['amount'],2,'.','')],',','"','');
+                fclose($output);
+                exit;
         }
     }
     if ($_SERVER['REQUEST_METHOD']!=='GET') reject(405,'Unsupported request method.');
@@ -67,5 +79,6 @@ try {
     if (!$api&&$status===401) { header('Location: /login?next='.urlencode($path));exit; }
     http_response_code($status);
     if ($api) jsonOut(['error'=>$message]);
-    echo '<!doctype html><meta name="viewport" content="width=device-width"><title>Forma Supply</title><main><h1>'.h($status).'</h1><p>'.h($message).'</p><a href="/">Return to workspace</a></main>';
+    $page='error'; $user=$_SESSION['user']??null; $count=array_sum(array_column($_SESSION['cart']??[],'quantity'));
+    require ROOT.'/templates/layout.php';
 }

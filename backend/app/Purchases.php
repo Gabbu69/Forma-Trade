@@ -13,7 +13,13 @@ final class Purchases {
     }
     public function update(array $body): array {
         $id=integer($body['id']??null,1,PHP_INT_MAX,'product');
-        $qty=integer($body['quantity']??null,0,9999,'quantity');
+        if (array_key_exists('delta',$body)) {
+            if (array_key_exists('quantity',$body)) reject(422,'Send one quantity adjustment.');
+            $delta=integer($body['delta'],-9999,9999,'pack adjustment');
+            $qty=integer(($_SESSION['cart'][$id]['quantity']??0)+$delta,0,9999,'total pack quantity');
+        } else {
+            $qty=integer($body['quantity']??null,0,9999,'quantity');
+        }
         if ($qty===0) unset($_SESSION['cart'][$id]);
         else {
             $p=sql($this->db,'SELECT price,stock,pack_size FROM products WHERE id=?',[$id])->fetch();

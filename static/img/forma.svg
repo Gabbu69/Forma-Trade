@@ -1,1 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="11" fill="#2459e8"/><g fill="none" stroke="white" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"><path d="m8 15 12-6 12 6-12 6z"/><path d="m8 20 12 6 12-6M8 25l12 6 12-6"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs><linearGradient id="tile" x2=".75" y2="1"><stop stop-color="#497bff"/><stop offset="1" stop-color="#1744bd"/></linearGradient></defs>
+  <rect width="48" height="48" rx="13" fill="url(#tile)"/>
+  <path d="m11 15 8-6h20l-7 7H19v7l-8 6z" fill="#fff"/>
+  <path d="m11 29 8-6h14l-7 7h-7v6l-8 5z" fill="#d7e6ff"/>
+  <path d="m11 22 8-6v7l-8 6z" fill="#96bdff"/>
+</svg>
