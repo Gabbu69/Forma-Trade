@@ -30,7 +30,7 @@ jobs:
     env:
       FORMA_TEST_DB_ACCOUNT_HOST: '%'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install PHP extensions
         run: |
           sudo apt-get update
