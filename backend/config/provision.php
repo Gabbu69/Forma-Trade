@@ -9,4 +9,4 @@ $schema=$env['DB_NAME']??'';
 if (!in_array($schema,['forma_trade','forma_supply'],true)||$env['DB_USER']!=='forma_app') throw new RuntimeException('Use the generated configuration with the private demo instance.');
 $db->exec("CREATE DATABASE IF NOT EXISTS $schema CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
 $q=$db->prepare("CREATE USER IF NOT EXISTS 'forma_app'@'127.0.0.1' IDENTIFIED BY ?"); $q->execute([$env['DB_PASSWORD']]);
-$db->exec("GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,REFERENCES,INDEX ON $schema.* TO 'forma_app'@'127.0.0.1'");
+$db->exec("GRANT SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,REFERENCES,INDEX ON $schema.* TO 'forma_app'@'127.0.0.1'");

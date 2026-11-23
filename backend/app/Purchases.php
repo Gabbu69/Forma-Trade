@@ -44,19 +44,24 @@ final class Purchases {
         $cart=$_SESSION['cart']; ksort($cart,SORT_NUMERIC);
         $this->db->beginTransaction();
         try {
-            $lines=[]; $changed=false;
+            $lines=[]; $quotes=[];
             foreach ($cart as $id=>$entry) {
                 $p=sql($this->db,'SELECT * FROM products WHERE id=? FOR UPDATE',[$id])->fetch();
                 if (!$p || sql($this->db, 'SELECT product_id FROM retired_products WHERE product_id=? FOR UPDATE', [$id])->fetch()) {
                     reject(409,'An item is unavailable. Review the cart.');
                 }
                 if ($entry['price']!==$p['price'] || (int)$entry['quoted_pack']!==(int)$p['pack_size']) {
-                    $_SESSION['cart'][$id]['price']=$p['price']; $_SESSION['cart'][$id]['quoted_pack']=$p['pack_size']; $changed=true;
+                    $quotes[$id] = ['price'=>$p['price'], 'quoted_pack'=>$p['pack_size']] + $entry;
                 }
                 if ($entry['quantity']>$p['stock']) reject(409,$p['name'].' has only '.$p['stock'].' packs available. Update the cart.');
                 $lines[]=$p+['quantity'=>$entry['quantity']];
             }
-            if ($changed) { $_SESSION['key']=bin2hex(random_bytes(16)); reject(409,'A pack price or pack size changed. Review the updated cart before confirming.'); }
+            if ($quotes) {
+                $keyForReview = bin2hex(random_bytes(16));
+                $_SESSION['cart'] = array_replace($_SESSION['cart'], $quotes);
+                $_SESSION['key'] = $keyForReview;
+                reject(409,'A pack price or pack size changed. Review the updated cart before confirming.');
+            }
             sql($this->db,'INSERT INTO orders(buyer_id,request_key) VALUES(?,?)',[$buyer,$key]);
             $order=(int)$this->db->lastInsertId(); $groups=[];
             foreach ($lines as $p) {
@@ -67,7 +72,9 @@ final class Purchases {
                     Notifications::record($this->db, $vendor, $groups[$vendor], 'new_order');
                 }
                 sql($this->db,'INSERT INTO order_lines(vendor_order_id,product_id,title,pack_size,unit_price,quantity) VALUES(?,?,?,?,?,?)',[$groups[$vendor],$p['id'],$p['name'],$p['pack_size'],$p['price'],$p['quantity']]);
-                sql($this->db,'UPDATE products SET stock=stock-?,version=version+1 WHERE id=?',[$p['quantity'],$p['id']]);
+                $remaining = $p['stock'] - $p['quantity'];
+                sql($this->db,'UPDATE products SET stock=?,version=version+1 WHERE id=?',[$remaining,$p['id']]);
+                Notifications::stockCrossing($this->db, $p, $remaining, $p['low_threshold']);
             }
             $this->db->commit();
             $_SESSION['cart']=[]; unset($_SESSION['key']);
@@ -86,12 +93,17 @@ final class Purchases {
             ON DUPLICATE KEY UPDATE stars=?', [$item['product_id'],$buyer,$stars,$stars]);
         return $stars;
     }
-    public function history(array $user): array {
+    public function history(array $user, ?int $order = null): array {
         $owner=$user['role']==='buyer'?'o.buyer_id':'v.vendor_id';
         $rating = $user['role']==='buyer'
             ? ',l.id line_id,l.product_id,(SELECT stars FROM reviews WHERE product_id=l.product_id AND buyer_id=o.buyer_id) stars'
             : '';
-        return sql($this->db,"SELECT o.id order_id,o.created_at,v.id group_id,v.status,v.fulfilled_at,b.name buyer,s.name vendor,l.title,l.unit_price,l.pack_size,l.quantity $rating FROM orders o JOIN vendor_orders v ON v.order_id=o.id JOIN users b ON b.id=o.buyer_id JOIN users s ON s.id=v.vendor_id JOIN order_lines l ON l.vendor_order_id=v.id WHERE $owner=? ORDER BY o.id DESC,v.id,l.id",[$user['id']])->fetchAll();
+        $params = [$user['id']];
+        if ($order !== null) {
+            $owner .= '=? AND o.id';
+            $params[] = $order;
+        }
+        return sql($this->db,"SELECT o.id order_id,o.created_at,v.id group_id,v.status,v.fulfilled_at,b.name buyer,s.name vendor,l.title,l.unit_price,l.pack_size,l.quantity $rating FROM orders o JOIN vendor_orders v ON v.order_id=o.id JOIN users b ON b.id=o.buyer_id JOIN users s ON s.id=v.vendor_id JOIN order_lines l ON l.vendor_order_id=v.id WHERE $owner=? ORDER BY o.id DESC,v.id,l.id",$params)->fetchAll();
     }
     public function advance(int $vendor,array $body): void {
         $id=integer($body['id']??null,1,PHP_INT_MAX,'order'); $next=$body['status']??'';

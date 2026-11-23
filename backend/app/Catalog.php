@@ -86,6 +86,7 @@ final class Catalog {
             }
             if ($existing) {
                 sql($this->db, 'UPDATE products SET name=?,category_id=?,pack_size=?,price=?,stock=?,low_threshold=?,image=?,version=version+1 WHERE id=?', [...$values,$cover,$id]);
+                Notifications::stockCrossing($this->db, $existing, $values[4], $values[5]);
                 if ($photos || $cover !== '') sql($this->db, 'DELETE FROM product_photos WHERE product_id=?', [$id]);
             } else {
                 sql($this->db, 'INSERT INTO products(name,category_id,pack_size,price,stock,low_threshold,image,vendor_id) VALUES(?,?,?,?,?,?,?,?)', [...$values,$cover,$owner]);

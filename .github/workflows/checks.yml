@@ -1,0 +1,48 @@
+name: Forma Trade checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: ci-admin-password
+          MARIADB_ROOT_HOST: '%'
+          MARIADB_DATABASE: forma_trade
+          MARIADB_USER: forma_app
+          MARIADB_PASSWORD: ci-app-password
+        ports:
+          - 33317:3306
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      FORMA_TEST_DB_ACCOUNT_HOST: '%'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PHP extensions
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y php-cli php-mysql php-mbstring
+      - name: Check PHP and JavaScript syntax
+        run: |
+          find backend templates tests -name '*.php' -print0 | xargs -0 -n1 php -l
+          for file in static/js/*.js tests/*.cjs; do node --check "$file" || exit; done
+      - name: Configure the isolated database
+        run: |
+          mkdir -p .runtime
+          printf %s ci-admin-password > .runtime/db-admin
+          sed 's/replace-with-local-password/ci-app-password/' .env.example > .env
+      - name: Run API acceptance tests
+        run: python3 -u tests/acceptance.py

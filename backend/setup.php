@@ -3,8 +3,18 @@ declare(strict_types=1);
 if (PHP_SAPI !== 'cli') exit;
 require __DIR__.'/config/bootstrap.php';
 $db=Database::connect();
-$db->exec(file_get_contents(__DIR__.'/config/schema.sql'));
 if ((int)$db->query("SELECT GET_LOCK(CONCAT(DATABASE(), ':setup'), 20)")->fetchColumn()!==1) throw new RuntimeException('Another setup is running.');
+$db->exec(file_get_contents(__DIR__.'/config/schema.sql'));
+if (!sql($db, "SHOW COLUMNS FROM users LIKE 'session_version'")->fetch()) {
+    $db->exec('ALTER TABLE users ADD session_version INT UNSIGNED NOT NULL DEFAULT 1');
+}
+if (!sql($db, "SHOW COLUMNS FROM account_notifications LIKE 'product_id'")->fetch()) {
+    $db->exec("ALTER TABLE account_notifications
+        MODIFY vendor_order_id INT UNSIGNED NULL,
+        MODIFY event_type ENUM('new_order','processing','fulfilled','low_stock') NOT NULL,
+        ADD product_id INT UNSIGNED NULL,
+        ADD FOREIGN KEY (product_id) REFERENCES products(id)");
+}
 $db->beginTransaction();
 try {
     if (!(int)$db->query('SELECT COUNT(*) FROM users')->fetchColumn()) {

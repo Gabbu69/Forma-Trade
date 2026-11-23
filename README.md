@@ -12,7 +12,7 @@ Forma Trade is a local wholesale marketplace for workspace products. Retail buye
 
 To keep the browser closed or choose the web port, use `powershell -ExecutionPolicy Bypass -File .\start.ps1 -NoBrowser -Port 8080`. The launcher loads PDO MySQL per PHP process. Set `FORMA_MARIADB_BIN` to a MariaDB bin folder for a custom installation. The automatic search checks Program Files and C:\xampp. The dedicated database uses TCP port 33317 on loopback. The web server runs in the launch window. Ctrl+C stops the web server. The private database process can stay running between demos.
 
-For an existing MySQL 8 or MariaDB server, create a dedicated empty UTF-8 database and app user. Before first launch, copy `.env.example` to `.env` and enter its connection settings. Grant the application SELECT, INSERT, UPDATE, DELETE, CREATE, INDEX, and REFERENCES on that database. Run `php -d extension=pdo_mysql backend/setup.php` and then the launcher. Setup preserves previously seeded records. Demo credentials and purchase orders are intended for local presentation.
+For an existing MySQL 8 or MariaDB server, create a dedicated empty UTF-8 database and app user. Before first launch, copy `.env.example` to `.env` and enter its connection settings. Grant the application SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, and REFERENCES on that database. Run `php -d extension=pdo_mysql backend/setup.php` and then the launcher. On an existing database, run the same setup command to apply the additive migrations. Setup preserves existing accounts, orders, and inbox entries. Users with sessions created before session versioning will need to sign in again once. Demo credentials and purchase orders are intended for local presentation.
 
 ## Demo accounts
 
@@ -48,6 +48,7 @@ From **Purchase orders**, choose **Buy Again** on a previous PO. Review current 
 The PHP front controller dispatches page and JSON routes through session, role, and CSRF checks. Catalog and purchase services use PDO prepared statements and InnoDB. Templates render the layout. Vanilla JavaScript fetches data and updates catalog cards, cart lines, order statuses, and Chart.js datasets. The router serves only approved static asset types under the static directory.
 
 - [Requirements and business rules](docs/requirements.md)
+- [Defense checklist](docs/defense-checklist.md)
 - [Database model and ER diagram](docs/data-model.md)
 - [JSON API reference](docs/api.md)
 - [SQL schema](backend/config/schema.sql) and [seed records](database_seed.sql)
@@ -67,7 +68,9 @@ To view the most recent 50 events, run `php -d extension=pdo_mysql backend/audit
 
 Start the private demo database with the launcher, then run `python tests/acceptance.py` from the project folder with Python 3.10 or newer. The suite creates a uniquely named test schema, seeds it, opens two independent PHP server processes, and removes its own schema after testing. Tests cover multi-supplier orders, duplicate submission, inventory contention, updated quotes, ownership, request validation, and both sales periods.
 
-For browser checks, install Node.js and Playwright in your test environment, make the `playwright` package resolvable by Node, and install Microsoft Edge. Run `python tests/acceptance.py --browser`. Set `FORMA_BROWSER=chrome` for installed Chrome. Browser checks exercise the UI at 375, 768, and 1440 pixels and save screenshots in `.runtime/qa`. The app itself does not require Node.js or Python.
+For browser checks, install Node.js and Playwright in your test environment, make the `playwright` package resolvable by Node, and install Microsoft Edge. Run `python tests/acceptance.py --browser`. Set `FORMA_BROWSER=chrome` for installed Chrome. Browser checks exercise the UI, including Profile, Settings, and Notifications, at 375, 768, and 1440 pixels and save screenshots in `.runtime/qa`. The app itself does not require Node.js or Python.
+
+GitHub Actions runs PHP and JavaScript syntax checks and the API acceptance suite against an isolated MariaDB service on pushes to main and pull requests. The separate Edge walkthrough needs PHP GD with WebP support, Node.js, Playwright, and a browser installed locally.
 
 ## Repository handoff
 

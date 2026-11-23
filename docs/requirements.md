@@ -10,12 +10,19 @@ Retail buyers compare workspace supplies sold in wholesale packs. Form Studio an
 | Purchase cart | The server tracks integer pack quantities, quoted price, and quoted pack size in the PHP session. Changes recalculate supplier subtotals and the order total. |
 | Purchase order | A buyer confirms one order across suppliers. Each supplier gets its own fulfillment record. The buyer sees the PO number and each status. |
 | Inventory | A supplier creates and edits only its products, including pack size, photo, price, stock, and alert threshold. An outdated edit produces a conflict. |
+| Buyer and vendor signup | A unique email, valid display name, password, and supported role create a new account. Each role reaches its own workspace. |
+| Profile and recovery | Sign-in credentials travel by POST. Profile photos are private to their accounts. Recovery requires a one-time code. A reset revokes existing sessions. A password change keeps only the current session. |
+| Ratings | Buyers can rate or update reviews for products on their own completed orders. |
+| Vendor order filters | PO number, buyer name, and status can be combined. Open orders and Clear filters update the list without a reload. |
+| Notifications | Vendors receive new order and low-stock alerts. Buyers receive shipping and completion updates. Users can view unread or older entries, mark them read, and remove them. |
+| Printable purchase orders | A buyer can print their own purchase order with supplier sections, accepted pack terms, and the original total. |
+| Abuse controls | Shared rate limits return HTTP 429 with retry guidance. The private audit CLI shows the actor when known, action, client IP, time, and HTTP outcome without credentials. |
 | Fulfillment | Each supplier advances its own portion from received to processing to fulfilled. The fulfillment date drives recorded sales. |
 | Sales | The chart and accessible data view show seven daily or six monthly buckets, including zero-sales periods, in Philippine time. |
 
 ## Consistency and access
 
-Prices are PHP currency amounts per pack stored as SQL decimals. The browser uses integer centavos for line totals. The server reads prices, stock, vendor ownership, and fulfillment transitions directly from the database. Checkout locks products by ascending ID inside one transaction. Insufficient stock rolls back the entire purchase. A changed pack quote requires review. Idempotency keys are unique per buyer and completed submission. Historical lines retain the pack size, item name, and price accepted at purchase.
+Prices are PHP currency amounts per pack stored as SQL decimals. The browser uses integer centavos for line totals. The server reads prices, stock, vendor ownership, and fulfillment transitions directly from the database. Checkout locks products by ascending ID inside one transaction. Insufficient stock rolls back the entire purchase. Checkout validates the entire cart before applying quote changes. A stock conflict leaves the cart and key intact. When a valid cart needs updated quotes, it receives a new checkout key and requires review. Idempotency keys are unique per buyer and completed submission. Historical lines retain the pack size, item name, and price accepted at purchase.
 
 Buyer order queries are scoped by buyer ID. Vendor fulfillment, product mutations, and analytics are scoped by vendor ID. Admin database provisioning is a CLI-only operation. Session authentication uses bcrypt, session ID regeneration, HTTP-only cookies, SameSite protection, and CSRF tokens on mutations. Templates escape text, and the browser constructs data-bearing elements with DOM text nodes.
 

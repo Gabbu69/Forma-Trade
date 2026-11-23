@@ -2336,3 +2336,55 @@ button[aria-busy="true"] {
     align-items: center;
   }
 }
+
+.print-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.print-order-link {
+  display: inline-flex;
+  margin: 6px 8px 6px 0;
+}
+.print-brand {
+  color: var(--muted);
+  font-weight: 700;
+}
+.print-table-wrap {
+  overflow-x: auto;
+}
+.print-lines {
+  width: 100%;
+  border-collapse: collapse;
+}
+.print-lines th,
+.print-lines td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: start;
+}
+.purchase-print-total {
+  display: flex;
+  justify-content: space-between;
+  font-size: 20px;
+}
+@media print {
+  body[data-page="print-order"] {
+    color: black !important;
+    background: white !important;
+  }
+  body[data-page="print-order"] :is(.mast, footer, .skip, .print-actions, .toast-container) {
+    display: none !important;
+  }
+  body[data-page="print-order"] :is(.panel, .page-title p, .print-brand) {
+    color: black !important;
+    background: white !important;
+    box-shadow: none;
+  }
+  .purchase-print tr {
+    break-inside: avoid;
+  }
+  .purchase-print .print-table-wrap {
+    overflow: visible;
+  }
+}

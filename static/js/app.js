@@ -756,6 +756,7 @@ function renderOrders(rows, vendor = false, onRatingSaved, partial = false) {
     }
     if (!vendor) {
       box.append(
+        element("a", { href: "/orders/" + first.order_id + "/print", class: "secondary print-order-link" }, "Print " + number),
         button(
           "Buy Again",
           (event) => openReorder(first.order_id, event.currentTarget),
@@ -1182,7 +1183,11 @@ function initNotifications() {
   markRead?.addEventListener("click", async () => {
     const result = await changeNotifications(markRead, "Marking as read…", { through: markRead.dataset.through }, "POST");
     if (!result) return;
-    for (const item of list.querySelectorAll(".notification-unread")) {
+    if (new URLSearchParams(location.search).has("unread")) {
+      location.reload();
+      return;
+    }
+    for (const item of list?.querySelectorAll(".notification-unread") ?? []) {
       item.classList.remove("notification-unread");
       item.querySelector(".notification-new").hidden = true;
     }
@@ -1191,7 +1196,8 @@ function initNotifications() {
   });
 
   function showEmptyInbox() {
-    list.hidden = markRead.hidden = deleteAll.hidden = true;
+    if (list) list.hidden = true;
+    markRead.hidden = deleteAll.hidden = true;
     const empty = $("#notificationsEmpty");
     empty.hidden = false;
     empty.focus();
@@ -1215,7 +1221,8 @@ function initNotifications() {
       const result = await changeNotifications(confirm, "Deleting…", { all: true }, "DELETE", feedback);
       cancel.disabled = false;
       if (!result) return;
-      list.replaceChildren();
+      list?.replaceChildren();
+      $("#olderNotifications")?.remove();
       deleteAll.hidden = true;
       dialog.addEventListener("hidden.bs.modal", () => {
         showEmptyInbox();
@@ -1236,6 +1243,9 @@ function initNotifications() {
     markRead.disabled = result.unread === 0;
     if (neighbor) {
       neighbor.querySelector("[data-delete-notification]").focus();
+    } else if ($("#olderNotifications") || location.search) {
+      location.reload();
+      return;
     } else {
       showEmptyInbox();
     }
@@ -1290,6 +1300,7 @@ async function init() {
     }
   });
   initNotifications();
+  $("#printOrder")?.addEventListener("click", () => window.print());
   if (page === "profile") initProfilePhoto();
   if (page === "profile" || page === "settings") initAccountForm();
   const purchaseTarget = /^#purchase-\d+$/.test(location.hash) ? location.hash.slice(1) : null;
@@ -1491,6 +1502,8 @@ async function init() {
     if (purchaseTarget) {
       setTab("fulfillment");
       document.getElementById(purchaseTarget)?.scrollIntoView();
+    } else if (location.hash === "#inventory") {
+      setTab("inventory");
     }
   }
 }
