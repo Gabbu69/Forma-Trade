@@ -29,7 +29,7 @@ Choose **Sign in → Use a demo account**, select an account, then sign in. All 
 
 1. Open the catalog. Filter by category, price, or rating, then reset. Add one Studio Mechanical Keyboard pack and one Arc Task Lamp pack.
 2. Open the cart. The original seed prices give subtotals of ₱8,900 and ₱4,600, for ₱13,500 in total. Sign in as North Retail from the cart and place the order. Read its PO number and the two supplier statuses.
-3. Sign in as Form Studio. Open **Orders**, locate the PO, mark it in transit, and mark it complete. View **Overview** and switch the sales chart between daily and monthly.
+3. Sign in as Form Studio. Open **Orders**, search for the PO number, mark it in transit, and mark it complete. View **Overview** and switch the sales chart between daily and monthly.
 4. Sign in as Field Objects. Its portion still shows **Order placed**. Select **Mark in transit**, then **Mark complete**, then inspect the low-stock Lift Laptop Stand under **Inventory** and edit its alert threshold.
 5. Return to North Retail’s **Purchase orders** and find both completed portions. Use the automated checks below to demonstrate a last-pack race and a price change without altering the presentation data.
 
@@ -52,6 +52,16 @@ The PHP front controller dispatches page and JSON routes through session, role, 
 - [JSON API reference](docs/api.md)
 - [SQL schema](backend/config/schema.sql) and [seed records](database_seed.sql)
 - The locally bundled Inter font and its license are in `static/fonts`. Third-party libraries and license notices are in `static/vendor`. The bundled product and workspace photographs were generated for this demo.
+
+## Accounts and order notifications
+
+Use **Create account** on the sign-in page to register as a buyer or vendor. The account menu opens your profile and settings. Create a one-time recovery code in Settings before you need to reset your password. The notification bell links to purchase or fulfillment events and tracks which updates are unread.
+
+## Rate limits and audit log
+
+Authentication routes return HTTP 429 with a Retry-After header when their 10-minute window reaches its limit. Sign-in allows eight failed attempts per client IP, reset allows five per client IP, and registration allows ten requests per client IP. Password changes and recovery-code generation each allow five failed attempts per signed-in account. Successful credential checks release their slot, except registration. The app uses the direct client address from PHP.
+
+To view the most recent 50 events, run `php -d extension=pdo_mysql backend/audit.php` from the project folder. The CLI outputs JSON lines with request ID, account ID when known, direct client IP, action, HTTP outcome, and timestamp in Philippine time. It covers sign-in, sign-out, registration, password changes and resets, recovery-code generation, inventory changes, and fulfillment actions. Request bodies and credentials are excluded. Requests periodically prune audit entries older than 30 days.
 
 ## Verification
 

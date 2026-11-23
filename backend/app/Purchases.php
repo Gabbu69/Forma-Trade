@@ -64,6 +64,7 @@ final class Purchases {
                 if (!isset($groups[$vendor])) {
                     sql($this->db,'INSERT INTO vendor_orders(order_id,vendor_id) VALUES(?,?)',[$order,$vendor]);
                     $groups[$vendor]=(int)$this->db->lastInsertId();
+                    Notifications::record($this->db, $vendor, $groups[$vendor], 'new_order');
                 }
                 sql($this->db,'INSERT INTO order_lines(vendor_order_id,product_id,title,pack_size,unit_price,quantity) VALUES(?,?,?,?,?,?)',[$groups[$vendor],$p['id'],$p['name'],$p['pack_size'],$p['price'],$p['quantity']]);
                 sql($this->db,'UPDATE products SET stock=stock-?,version=version+1 WHERE id=?',[$p['quantity'],$p['id']]);
@@ -95,10 +96,19 @@ final class Purchases {
     public function advance(int $vendor,array $body): void {
         $id=integer($body['id']??null,1,PHP_INT_MAX,'order'); $next=$body['status']??'';
         $from=match($next){'processing'=>'received','fulfilled'=>'processing',default=>reject(422,'Choose a valid order status.')};
-        $q=sql($this->db,"UPDATE vendor_orders SET status=?,fulfilled_at=IF(?='fulfilled',NOW(),NULL) WHERE id=? AND vendor_id=? AND status=?",[$next,$next,$id,$vendor,$from]);
-        if (!$q->rowCount()) {
-            if (!sql($this->db,'SELECT id FROM vendor_orders WHERE id=? AND vendor_id=?',[$id,$vendor])->fetch()) reject(403,'This order is outside your workspace.');
-            reject(409,'The order status has changed. Refresh the order.');
+        $this->db->beginTransaction();
+        try {
+            $q=sql($this->db,"UPDATE vendor_orders SET status=?,fulfilled_at=IF(?='fulfilled',NOW(),NULL) WHERE id=? AND vendor_id=? AND status=?",[$next,$next,$id,$vendor,$from]);
+            if (!$q->rowCount()) {
+                if (!sql($this->db,'SELECT id FROM vendor_orders WHERE id=? AND vendor_id=?',[$id,$vendor])->fetch()) reject(403,'This order is outside your workspace.');
+                reject(409,'The order status has changed. Refresh the order.');
+            }
+            $buyer = (int)sql($this->db, 'SELECT o.buyer_id FROM vendor_orders v JOIN orders o ON o.id=v.order_id WHERE v.id=?', [$id])->fetchColumn();
+            Notifications::record($this->db, $buyer, $id, $next);
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            throw $e;
         }
     }
     public function sales(int $vendor,string $period): array {

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="csrf-token" content="<?=h($_SESSION['csrf'])?>"><title><?=h(['catalog'=>'Marketplace','cart'=>'Purchase cart','orders'=>'Purchase orders','vendor'=>'Vendor workspace','login'=>'Sign in','error'=>'Workspace message'][$page])?> · Forma Trade</title>
+<meta name="csrf-token" content="<?=h($_SESSION['csrf'])?>"><title><?=h(['catalog'=>'Marketplace','cart'=>'Purchase cart','orders'=>'Purchase orders','vendor'=>'Vendor workspace','login'=>'Sign in','register'=>'Create account','forgot-password'=>'Reset password','profile'=>'Profile','settings'=>'Settings','notifications'=>'Notifications','error'=>'Workspace message'][$page])?> · Forma Trade</title>
 <script src="/static/js/appearance.js"></script>
 <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="/static/img/forma.svg"><link rel="stylesheet" href="/static/vendor/bootstrap.min.css"><link rel="stylesheet" href="/static/css/app.css">
@@ -17,8 +17,27 @@
 <?php endif;?>
 </nav>
 <div class="nav-actions"><button type="button" class="appearance" id="appearance" aria-label="Switch color theme"><i data-lucide="sun" aria-hidden="true"></i></button><?php if(($user['role']??'')!=='vendor'):?><a href="/cart" class="cart-link" aria-label="Purchase cart"><i data-lucide="shopping-bag"></i><span>Cart</span><b id="cartCount"><?=h($count)?></b></a><?php endif;?>
-<?php if($user):?><button id="logout" class="account" title="Sign out of <?=h($user['name'])?>"><i data-lucide="log-out"></i><span>Sign out</span></button><?php else:?><a href="/login" class="account" aria-label="Sign in"><i data-lucide="circle-user-round"></i><span>Sign in</span></a><?php endif;?></div></div></header>
-<main id="main" class="frame"><?php if($page==='error'):?><section class="page-title"><h1><?=h($status)?></h1><p><?=h($message)?></p><a class="back mt-3" href="/">Return to workspace</a></section><?php else: require __DIR__.'/'.$page.'.php'; endif;?></main>
+<?php if($user):?>
+  <a href="/notifications" class="notification-link" id="notificationLink" <?=$page==='notifications'?'aria-current="page"':''?> aria-label="Notifications<?=$unreadNotifications?', '.$unreadNotifications.' unread':''?>">
+    <i data-lucide="bell" aria-hidden="true"></i><b id="notificationCount" aria-hidden="true"<?=$unreadNotifications?'':' hidden'?>><?=h($unreadNotifications > 99 ? '99+' : $unreadNotifications)?></b>
+  </a>
+  <div class="dropdown">
+    <button type="button" class="account account-trigger" id="accountMenu" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu">
+      <span class="account-menu-avatar" data-account-avatar aria-hidden="true"><?php if ($accountPhoto): ?><img src="<?=h($accountPhoto)?>" alt=""><?php else: ?><i data-lucide="circle-user-round"></i><?php endif; ?></span><span>Account</span><i class="account-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end account-menu" aria-labelledby="accountMenu">
+      <li class="account-menu-name">
+        <span class="account-menu-avatar" data-account-avatar aria-hidden="true"><?php if ($accountPhoto): ?><img src="<?=h($accountPhoto)?>" alt=""><?php else: ?><i data-lucide="circle-user-round"></i><?php endif; ?></span>
+        <span data-member-name><?=h($user['name'])?></span>
+      </li>
+      <li><a class="dropdown-item" href="/profile" <?=$page==='profile'?'aria-current="page"':''?>><i data-lucide="user-round" aria-hidden="true"></i>Profile</a></li>
+      <li><a class="dropdown-item" href="/settings" <?=$page==='settings'?'aria-current="page"':''?>><i data-lucide="settings" aria-hidden="true"></i>Settings</a></li>
+      <li><hr class="dropdown-divider"></li>
+      <li><button type="button" id="logout" class="dropdown-item"><i data-lucide="log-out" aria-hidden="true"></i>Sign out</button></li>
+    </ul>
+  </div>
+<?php else:?><a href="/login" class="account" aria-label="Sign in"><i data-lucide="circle-user-round" aria-hidden="true"></i><span>Sign in</span></a><?php endif;?></div></div></header>
+<main id="main" class="frame"><?php if($page==='error'):?><section class="page-title"><h1><?=h($status)?></h1><p><?=h($message)?></p><a class="back mt-3" href="/">Return to workspace</a></section><?php else: require __DIR__.'/'.(in_array($page,['profile','settings'],true)?'account':$page).'.php'; endif;?></main>
 <footer class="frame"><span>Forma Trade</span><span>Wholesale workspace supplies</span></footer>
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="notice" class="toast" role="status" aria-live="polite" aria-atomic="true">

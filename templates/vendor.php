@@ -2,7 +2,26 @@
 <div class="tabs" role="group" aria-label="Vendor workspace views"><button data-tab="overview" aria-pressed="true">Overview</button><button data-tab="inventory" aria-pressed="false">Inventory</button><button data-tab="fulfillment" aria-pressed="false">Orders</button></div>
 <section id="overview"><div class="metrics" id="metrics"></div><div class="panel"><div class="panel-title"><h2>Sales from completed orders</h2><div class="report-tools"><select id="period" aria-label="Sales interval"><option value="day">Daily · 7 days</option><option value="month">Monthly · 6 months</option></select><button id="exportSales" class="secondary" disabled><i data-lucide="download"></i> Download CSV</button></div></div><div class="chart-box"><canvas id="chart" aria-label="Sales from completed orders by period" role="img"></canvas></div><details class="chart-data"><summary>View sales figures</summary><div id="salesFigures"></div></details></div></section>
 <section id="inventory" hidden><div class="panel-title"><h2>Product inventory</h2><button id="addProduct" class="primary"><i data-lucide="plus"></i> Add product</button></div><div class="view-filter" id="inventoryFilter" hidden>Showing low-stock products <button class="text-action" type="button">Show all products</button></div><div id="inventoryView"></div></section>
-<section id="fulfillment" hidden><h2>Orders</h2><div class="view-filter" id="ordersFilter" hidden>Showing open orders <button class="text-action" type="button">Show all orders</button></div><div id="ordersView"></div></section>
+<section id="fulfillment" hidden aria-labelledby="vendorOrdersHeading">
+  <h2 id="vendorOrdersHeading">Orders</h2>
+  <form class="panel vendor-order-filters" id="vendorOrderFilters" aria-label="Filter vendor orders">
+    <label>PO number<input type="search" name="po" maxlength="30" placeholder="e.g. PO-1003"></label>
+    <label>Buyer<input type="search" name="buyer" maxlength="100" placeholder="Search by name"></label>
+    <label>Status
+      <select name="status">
+        <option value="">All statuses</option>
+        <option value="open">Open orders</option>
+        <option value="received">Order placed</option>
+        <option value="processing">In transit</option>
+        <option value="fulfilled">Completed</option>
+      </select>
+    </label>
+    <button class="secondary" type="reset">Clear filters</button>
+    <p class="muted vendor-order-count" id="vendorOrderCount" role="status"></p>
+  </form>
+  <div class="view-filter" id="ordersFilter" hidden>Showing open orders <button class="text-action" type="button">Show all orders</button></div>
+  <div id="ordersView"></div>
+</section>
 <div class="modal fade" id="productModal" tabindex="-1" aria-labelledby="productModalTitle"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h2 id="productModalTitle">Product details</h2><button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div><form id="productForm" class="modal-body">
 <label>Product name<input name="name" required maxlength="100"></label>
 <div class="row g-3">

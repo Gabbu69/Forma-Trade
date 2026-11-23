@@ -14,6 +14,9 @@
     root.dataset.appearance = choice;
     root.dataset.bsTheme =
       choice === "system" ? (system.matches ? "dark" : "light") : choice;
+    for (const option of document.querySelectorAll("[data-theme-choice]")) {
+      option.checked = option.value === choice;
+    }
     const control = document.getElementById("appearance");
     if (control) {
       const dark = root.dataset.bsTheme === "dark";
@@ -27,6 +30,16 @@
     }
     window.dispatchEvent(new Event("forma:appearance"));
   }
+  function select(choice) {
+    const feedback = document.getElementById("themeFeedback");
+    if (feedback) feedback.textContent = "";
+    try {
+      localStorage.setItem(storageKey, choice);
+    } catch {
+      if (feedback) feedback.textContent = "This browser couldn't save your theme.";
+    }
+    apply(choice);
+  }
   apply(read());
   system.addEventListener("change", () =>
     apply(document.documentElement.dataset.appearance),
@@ -36,14 +49,12 @@
   });
   document.addEventListener("DOMContentLoaded", () => {
     const control = document.getElementById("appearance");
-    if (!control) return;
     apply(document.documentElement.dataset.appearance);
-    control.addEventListener("click", () => {
-      const choice = document.documentElement.dataset.bsTheme === "dark" ? "light" : "dark";
-      try {
-        localStorage.setItem(storageKey, choice);
-      } catch {}
-      apply(choice);
+    control?.addEventListener("click", () => {
+      select(document.documentElement.dataset.bsTheme === "dark" ? "light" : "dark");
     });
+    for (const option of document.querySelectorAll("[data-theme-choice]")) {
+      option.addEventListener("change", () => select(option.value));
+    }
   });
 })();

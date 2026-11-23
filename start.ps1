@@ -3,6 +3,9 @@ $ErrorActionPreference='Stop'
 Set-Location -LiteralPath $PSScriptRoot
 $php=(Get-Command php.exe).Source
 $flags=@('-d','extension=pdo_mysql','-d','display_errors=0')
+if ('gd' -notin (& $php -m) -and 'gd' -in (& $php -d extension=gd -m)) {
+    $flags += @('-d','extension=gd')
+}
 $state=Join-Path $PSScriptRoot '.runtime'
 [void][IO.Directory]::CreateDirectory($state)
 function Secret { [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N') }

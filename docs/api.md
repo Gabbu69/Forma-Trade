@@ -2,10 +2,22 @@
 
 All paths below start with `/api/`. Use the same session cookie for each request. JSON mutations accept a JSON object, the `Content-Type: application/json` header, and the current page's `csrf-token` meta value in `X-CSRF-Token`. Sign-in regenerates the session and token. Load the destination page after signing in. Responses are JSON. Errors have an `error` message.
 
+Sign-in, registration, password reset, password change, and recovery code generation can return HTTP 429. The Retry-After header gives the number of seconds until another attempt is allowed. Audited requests include an X-Request-ID header for matching the response to the local audit log.
+
 | Method and path | Caller | Request and response |
 | --- | --- | --- |
 | GET catalog | Public | Optional q, category, vendor, min, max, rating, stock=1, sort=price/high/name. Returns matching products with supplier, category, average rating, pack price and stock. Returns the cover key in `image` and gallery keys in `images` in display order. See photo URLs below. |
 | POST login | Public | email, password. Returns id, name, email, role. |
+| POST register | Guest | name, email, new_password, confirm_password, role (buyer or vendor). Creates an account and signs it in. |
+| POST reset-password | Public | email, code, new_password, confirm_password. Consumes a valid one-time recovery code. |
+| POST account/profile | Signed-in session | name. Returns the saved display name. |
+| POST account/password | Signed-in session | current_password, new_password, confirm_password. Changes the password. |
+| POST account/recovery | Signed-in session | current_password. Returns a new one-time code and replaces the previous code. |
+| POST account/photo | Signed-in session | Multipart photo[] with one supported image. Returns an account-private photo URL. |
+| DELETE account/photo | Signed-in session | Empty object. Removes the current profile photo. |
+| GET notifications | Signed-in session | Returns unread count. |
+| POST notifications | Signed-in session | through. Marks notifications through that ID as read. Returns unread count. |
+| DELETE notifications | Signed-in session | id or all=true. Removes notifications from the signed-in account and returns unread count. |
 | POST logout | Signed-in session | Empty object. Ends session and returns ok. |
 | GET cart | Guest or buyer | Returns items with quoted prices and quantities, plus checkout key. |
 | POST cart | Guest or buyer | id with either an absolute quantity or a signed delta in packs. A delta is applied to the current session quantity while the session is locked. Zero removes a line. Returns refreshed cart and key. |

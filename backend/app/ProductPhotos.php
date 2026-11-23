@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 final class ProductPhotos {
-    public static function uploads(?array $files): array {
+    public static function uploads(?array $files, int $maxSide = 1200): array {
         if (!$files) return [];
         if (!is_array($files['error'] ?? null) || count($files['error']) > 3) reject(422,'Choose up to three product photos.');
 
@@ -23,7 +23,7 @@ final class ProductPhotos {
             if (!function_exists('imagewebp')) reject(503,'The server needs the PHP GD extension with WebP support to accept photos.');
             $image = @imagecreatefromstring(file_get_contents($path));
             if (!$image) reject(422,'The photo could not be read.');
-            $scale = min(1, 1200 / max($info[0], $info[1]));
+            $scale = min(1, $maxSide / max($info[0], $info[1]));
             if ($scale < 1) $image = imagescale($image, max(1, (int)round($info[0] * $scale)), max(1, (int)round($info[1] * $scale)));
             if (!$image) throw new RuntimeException('Could not resize product photo.');
             if (!imageistruecolor($image)) imagepalettetotruecolor($image);

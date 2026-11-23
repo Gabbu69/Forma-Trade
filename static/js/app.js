@@ -392,7 +392,15 @@ async function catalogPage() {
   initPreview();
   const form = $("#filterForm"),
     list = $("#products");
-  let pending, timer;
+  const sortToggle = $("#sort");
+  const sortOptions = [...$("#sortOptions").querySelectorAll("[data-sort-value]")];
+  let pending, timer, sort = "";
+
+  function selectSort(option) {
+    sort = option.dataset.sortValue;
+    $("#sortValue").textContent = option.querySelector("span").textContent;
+    for (const item of sortOptions) item.setAttribute("aria-pressed", String(item === option));
+  }
   async function filter() {
     pending?.abort();
     pending = new AbortController();
@@ -410,7 +418,7 @@ async function catalogPage() {
       return;
     }
     params.set("q", $("#search").value.trim());
-    params.set("sort", $("#sort").value);
+    params.set("sort", sort);
     try {
       const items = await api("catalog?" + params, undefined, signal);
       if (signal.aborted) return;
@@ -444,13 +452,21 @@ async function catalogPage() {
   };
   form.addEventListener("input", schedule);
   $("#search").addEventListener("input", schedule);
-  $("#sort").addEventListener("change", filter);
+  for (const option of sortOptions) {
+    option.addEventListener("click", () => {
+      clearTimeout(timer);
+      selectSort(option);
+      bootstrap.Dropdown.getOrCreateInstance(sortToggle).hide();
+      sortToggle.focus();
+      filter();
+    });
+  }
   form.addEventListener("submit", (event) => event.preventDefault());
   $("#reset").addEventListener("click", () => {
     clearTimeout(timer);
     form.reset();
     $("#search").value = "";
-    $("#sort").value = "";
+    selectSort(sortOptions[0]);
     filter();
   });
   remember(await api("cart"));
@@ -612,7 +628,11 @@ function orderRating(line, onRatingSaved) {
       icon("star"),
     ));
   }
-  const save = element("button", { type: "submit", class: "secondary" }, "Save rating");
+  const save = element(
+    "button",
+    { type: "submit", class: "secondary" },
+    line.stars == null ? "Save rating" : "Update rating",
+  );
   const form = element("form", { class: "order-rating" }, rating, save);
   form.onsubmit = async (event) => {
     event.preventDefault();
@@ -622,8 +642,9 @@ function orderRating(line, onRatingSaved) {
     try {
       const result = await api("orders/rating", { line_id: line.line_id, stars });
       document.querySelectorAll('[data-rating-product="' + line.product_id + '"]').forEach((group) => {
-        if (!group.disabled || group === rating)
-          group.querySelector('input[value="' + result.stars + '"]').checked = true;
+        if (group.disabled && group !== rating) return;
+        group.querySelector('input[value="' + result.stars + '"]').checked = true;
+        if (group !== rating) group.closest("form").querySelector("button").textContent = "Update rating";
       });
       note("Rating saved.");
       onRatingSaved?.(line.product_id, result.stars);
@@ -632,6 +653,7 @@ function orderRating(line, onRatingSaved) {
     } finally {
       rating.disabled = false;
       restore();
+      if (line.stars != null) save.textContent = "Update rating";
     }
   };
   return form;
@@ -661,7 +683,7 @@ function renderOrders(rows, vendor = false, onRatingSaved, partial = false) {
       number = "PO-" + first.order_id;
     const box = element(
       "article",
-      { class: "order-card" },
+      { class: "order-card", id: "purchase-" + first.order_id },
       element(
         "div",
         { class: "panel-title" },
@@ -751,17 +773,13 @@ function showPurchases(rows) {
     all: { heading: "Purchase history", matches: () => true },
     ship: { heading: "To Ship", matches: (row) => row.status === "received", empty: "No items are waiting to ship." },
     receive: { heading: "To Receive", matches: (row) => row.status === "processing", empty: "No items are in transit." },
-    rate: { heading: "To Rate", matches: (row) => row.status === "fulfilled" && row.stars == null, empty: "You're caught up on ratings." },
+    rate: { heading: "To Rate", matches: (row) => row.status === "fulfilled", empty: "Completed items will appear here for rating." },
   };
   const controls = [...document.querySelectorAll("[data-purchase-view]")];
   let active = "all";
   function ratingSaved(productId, stars) {
     for (const row of rows)
       if (row.product_id === productId) row.stars = stars;
-    if (active === "rate") {
-      render();
-      controls.find((control) => control.dataset.purchaseView === active).focus();
-    }
   }
   function render() {
     const view = views[active];
@@ -782,7 +800,12 @@ function showPurchases(rows) {
   render();
 }
 function setTab(name, filtered = false) {
-  vendorFilter = filtered ? name : "";
+  vendorFilter = filtered && name === "inventory" ? name : "";
+  if (filtered && name === "fulfillment") {
+    const form = $("#vendorOrderFilters");
+    form.reset();
+    form.elements.status.value = "open";
+  }
   renderVendorLists();
   for (const tab of document.querySelectorAll("[data-tab]")) {
     const active = tab.dataset.tab === name;
@@ -997,7 +1020,6 @@ function renderVendorLists() {
     metric(low, "Products at or below stock threshold", "inventory"),
   );
   $("#inventoryFilter").hidden = vendorFilter !== "inventory";
-  $("#ordersFilter").hidden = vendorFilter !== "fulfillment";
   const inventory =
     vendorFilter === "inventory"
       ? vendorProducts.filter((p) => Number(p.stock) <= Number(p.low_threshold))
@@ -1049,16 +1071,211 @@ function renderVendorLists() {
           : "Add a product to start your catalog.",
       ),
     );
-  const orders =
-    vendorFilter === "fulfillment"
-      ? vendorOrders.filter((r) => r.status !== "fulfilled")
-      : vendorOrders;
-  renderOrders(orders, true);
-  if (!orders.length && vendorFilter === "fulfillment")
-    $("#ordersView").replaceChildren(
-      empty("All caught up", "There are no open orders."),
-    );
+  renderVendorOrders();
   icons();
+}
+
+function renderVendorOrders() {
+  const fields = $("#vendorOrderFilters").elements;
+  const po = fields.po.value.trim().toLowerCase().replace(/\s+/g, "");
+  const buyer = fields.buyer.value.trim().toLowerCase();
+  const status = fields.status.value;
+  const orders = vendorOrders.filter((row) => {
+    const matchesStatus = status === "open" ? row.status !== "fulfilled" : !status || row.status === status;
+    return matchesStatus && ("po-" + row.order_id).includes(po) && row.buyer.toLowerCase().includes(buyer);
+  });
+  const count = new Set(orders.map((row) => row.order_id)).size;
+  $("#vendorOrderCount").textContent = count + (count === 1 ? " order" : " orders");
+  $("#ordersFilter").hidden = status !== "open";
+  if (orders.length || !(po || buyer || status)) {
+    renderOrders(orders, true);
+  } else {
+    const openOnly = status === "open" && !po && !buyer;
+    $("#ordersView").replaceChildren(openOnly
+      ? empty("All caught up", "There are no open orders.")
+      : empty("No matching orders", "Try a different PO number, buyer, or status."));
+  }
+}
+function initProfilePhoto() {
+  const form = $("#profilePhotoForm");
+  const input = $("#profilePhoto");
+  const save = form.querySelector("button[type=submit]");
+  const remove = $("#removeProfilePhoto");
+  const error = form.querySelector(".form-error");
+
+  async function changePhoto(button, body, method) {
+    const restore = busy(button, button === save ? "Saving…" : "Removing…");
+    const other = button === save ? remove : save;
+    other.disabled = input.disabled = true;
+    error.textContent = "";
+    try {
+      const { photo } = await api("account/photo", body, undefined, method);
+      for (const avatar of document.querySelectorAll("[data-account-avatar]")) {
+        avatar.replaceChildren(photo ? element("img", { src: photo, alt: "" }) : icon("circle-user-round"));
+      }
+      form.reset();
+      remove.hidden = !photo;
+      note(photo ? "Profile photo saved." : "Profile photo removed.");
+    } catch (failure) {
+      error.textContent = failure.message;
+    } finally {
+      other.disabled = input.disabled = false;
+      restore();
+      if (remove.hidden && button === remove) input.focus();
+    }
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!save.disabled) changePhoto(save, new FormData(form), "POST");
+  });
+  remove.addEventListener("click", () => changePhoto(remove, {}, "DELETE"));
+}
+
+function initNotifications() {
+  const link = $("#notificationLink");
+  if (!link) return;
+  const badge = $("#notificationCount");
+  const markRead = $("#readNotifications");
+  const deleteAll = $("#deleteAllNotifications");
+  const list = $(".notification-list");
+  let changing = false;
+  let requestVersion = 0;
+  function updateBadge(unread) {
+    badge.textContent = unread > 99 ? "99+" : unread;
+    badge.hidden = unread === 0;
+    link.setAttribute("aria-label", unread ? "Notifications, " + unread + " unread" : "Notifications");
+  }
+  async function refreshBadge() {
+    if (document.hidden || changing) return;
+    const version = ++requestVersion;
+    try {
+      const { unread } = await api("notifications");
+      if (version === requestVersion) updateBadge(unread);
+    } catch {}
+  }
+
+  window.setInterval(refreshBadge, 30000);
+  document.addEventListener("visibilitychange", refreshBadge);
+  async function changeNotifications(control, label, body, method, feedback) {
+    changing = true;
+    ++requestVersion;
+    const otherControls = [...document.querySelectorAll("#readNotifications, #deleteAllNotifications, [data-delete-notification]")]
+      .filter((button) => button !== control && !button.disabled);
+    for (const button of otherControls) button.disabled = true;
+    const restore = busy(control, label);
+    try {
+      const result = await api("notifications", body, undefined, method);
+      updateBadge(result.unread);
+      return result;
+    } catch (error) {
+      if (feedback) feedback.textContent = error.message;
+      else note(error.message, "error");
+      return null;
+    } finally {
+      restore();
+      for (const button of otherControls) button.disabled = false;
+      changing = false;
+    }
+  }
+
+  markRead?.addEventListener("click", async () => {
+    const result = await changeNotifications(markRead, "Marking as read…", { through: markRead.dataset.through }, "POST");
+    if (!result) return;
+    for (const item of list.querySelectorAll(".notification-unread")) {
+      item.classList.remove("notification-unread");
+      item.querySelector(".notification-new").hidden = true;
+    }
+    markRead.disabled = true;
+    note("Notifications marked as read.");
+  });
+
+  function showEmptyInbox() {
+    list.hidden = markRead.hidden = deleteAll.hidden = true;
+    const empty = $("#notificationsEmpty");
+    empty.hidden = false;
+    empty.focus();
+  }
+
+  const dialog = $("#deleteNotificationsModal");
+  if (dialog) {
+    const cancel = dialog.querySelector("[data-bs-dismiss]");
+    const confirm = $("#confirmDeleteNotifications");
+    const feedback = dialog.querySelector(".form-error");
+    dialog.addEventListener("shown.bs.modal", () => {
+      feedback.textContent = "";
+      cancel.focus();
+    });
+    dialog.addEventListener("hide.bs.modal", (event) => {
+      if (changing) event.preventDefault();
+    });
+    confirm.addEventListener("click", async () => {
+      feedback.textContent = "";
+      cancel.disabled = true;
+      const result = await changeNotifications(confirm, "Deleting…", { all: true }, "DELETE", feedback);
+      cancel.disabled = false;
+      if (!result) return;
+      list.replaceChildren();
+      deleteAll.hidden = true;
+      dialog.addEventListener("hidden.bs.modal", () => {
+        showEmptyInbox();
+        note("All notifications deleted.");
+      }, { once: true });
+      bootstrap.Modal.getOrCreateInstance(dialog).hide();
+    });
+  }
+
+  list?.addEventListener("click", async (event) => {
+    const control = event.target.closest("[data-delete-notification]");
+    if (!control || changing) return;
+    const item = control.closest("li");
+    const neighbor = item.nextElementSibling || item.previousElementSibling;
+    const result = await changeNotifications(control, "Deleting…", { id: control.dataset.deleteNotification }, "DELETE");
+    if (!result) return;
+    item.remove();
+    markRead.disabled = result.unread === 0;
+    if (neighbor) {
+      neighbor.querySelector("[data-delete-notification]").focus();
+    } else {
+      showEmptyInbox();
+    }
+    note("Notification deleted.");
+  });
+}
+
+function initAccountForm() {
+  const profile = page === "profile";
+  const form = $(profile ? "#profileForm" : "#passwordForm");
+  const error = form.querySelector(".form-error");
+  const fields = [...form.querySelectorAll("input")];
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = form.querySelector("button[type=submit]");
+    if (button.disabled) return;
+    const body = Object.fromEntries(new FormData(form));
+    const restore = busy(button, "Saving…");
+    error.textContent = "";
+    for (const field of fields) field.readOnly = true;
+    try {
+      if (profile) {
+        const result = await api("account/profile", body);
+        $("#profileName").value = result.name;
+        for (const label of document.querySelectorAll("[data-member-name]")) {
+          label.textContent = result.name;
+        }
+        note("Profile saved.");
+      } else {
+        await api("account/password", body);
+        form.reset();
+        note("Password changed.");
+      }
+    } catch (failure) {
+      error.textContent = failure.message;
+    } finally {
+      for (const field of fields) field.readOnly = false;
+      restore();
+    }
+  });
 }
 async function init() {
   icons();
@@ -1066,12 +1283,16 @@ async function init() {
     const restore = busy(e.currentTarget, "Signing out…");
     try {
       await api("logout", {});
-      location.assign("/");
+      location.replace("/login");
     } catch (e) {
       restore();
       note(e.message, "error");
     }
   });
+  initNotifications();
+  if (page === "profile") initProfilePhoto();
+  if (page === "profile" || page === "settings") initAccountForm();
+  const purchaseTarget = /^#purchase-\d+$/.test(location.hash) ? location.hash.slice(1) : null;
   if (page === "catalog") await catalogPage();
   if (page === "cart") {
     remember(await api("cart"));
@@ -1080,6 +1301,7 @@ async function init() {
   if (page === "orders") {
     const rows = await api("orders");
     showPurchases(rows);
+    if (purchaseTarget) document.getElementById(purchaseTarget)?.scrollIntoView();
     const placed = new URLSearchParams(location.search).get("placed");
     if (placed && rows.some((r) => String(r.order_id) === placed))
       $("#confirmation").append(
@@ -1089,6 +1311,50 @@ async function init() {
           "Purchase order PO-" + placed + " placed successfully.",
         ),
       );
+  }
+  for (const form of document.querySelectorAll("#resetPasswordForm, #recoveryForm")) {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button");
+      if (button.disabled) return;
+      const feedback = form.querySelector(".form-error");
+      const resultBox = $("#recoveryResult");
+      const restore = busy(button, "Please wait…");
+      feedback.textContent = "";
+      try {
+        const result = await api(form.id === "recoveryForm" ? "account/recovery" : "reset-password",
+          Object.fromEntries(new FormData(form)));
+        if (resultBox) {
+          form.reset();
+          resultBox.querySelector("code").textContent = result.code;
+          resultBox.hidden = false;
+        } else {
+          location.replace("/login?reset=1");
+        }
+      } catch (error) {
+        feedback.textContent = error.message;
+      } finally {
+        restore();
+      }
+    });
+  }
+  if (page === "register") {
+    const form = $("#registerForm");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button");
+      if (button.disabled) return;
+      const feedback = form.querySelector(".form-error");
+      const restore = busy(button, "Creating account…");
+      feedback.textContent = "";
+      try {
+        const user = await api("register", Object.fromEntries(new FormData(form)));
+        location.replace(user.role === "vendor" ? "/vendor" : "/");
+      } catch (error) {
+        feedback.textContent = error.message;
+        restore();
+      }
+    });
   }
   if (page === "login") {
     const form = $("#loginForm");
@@ -1105,13 +1371,8 @@ async function init() {
       try {
         const user = await api("login", Object.fromEntries(new FormData(form)));
         const next = new URLSearchParams(location.search).get("next");
-        location.assign(
-          user.role === "vendor"
-            ? "/vendor"
-            : ["/orders", "/cart"].includes(next)
-              ? next
-              : "/",
-        );
+        const destinations = user.role === "vendor" ? ["/vendor"] : ["/", "/orders", "/cart"];
+        location.assign([...destinations, "/profile", "/settings", "/notifications"].includes(next) ? next : destinations[0]);
       } catch (err) {
         form.querySelector(".form-error").textContent = err.message;
         restore();
@@ -1126,8 +1387,12 @@ async function init() {
       setTab("inventory");
       $("[data-tab=inventory]").focus();
     };
+    const orderFilters = $("#vendorOrderFilters");
+    orderFilters.addEventListener("submit", (event) => event.preventDefault());
+    orderFilters.addEventListener("input", renderVendorOrders);
+    orderFilters.addEventListener("reset", () => requestAnimationFrame(renderVendorOrders));
     $("#ordersFilter button").onclick = () => {
-      setTab("fulfillment");
+      orderFilters.reset();
       $("[data-tab=fulfillment]").focus();
     };
     $("#exportSales").onclick = downloadSales;
@@ -1223,6 +1488,10 @@ async function init() {
       }
     };
     await loadVendor();
+    if (purchaseTarget) {
+      setTab("fulfillment");
+      document.getElementById(purchaseTarget)?.scrollIntoView();
+    }
   }
 }
 init().catch((error) => note(error.message, "error"));

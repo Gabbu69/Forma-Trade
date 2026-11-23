@@ -11,9 +11,11 @@ final class Access {
         session_start();
         $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
     }
+    public static function user(): array {
+        return $_SESSION['user'] ?? reject(401,'Sign in to continue.');
+    }
     public static function role(string $role): array {
-        $user=$_SESSION['user']??null;
-        if (!$user) reject(401,'Sign in to continue.');
+        $user=self::user();
         if ($user['role']!==$role) reject(403,'This workspace belongs to another role.');
         return $user;
     }
