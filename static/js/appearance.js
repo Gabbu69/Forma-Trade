@@ -14,18 +14,16 @@
     root.dataset.appearance = choice;
     root.dataset.bsTheme =
       choice === "system" ? (system.matches ? "dark" : "light") : choice;
-    const select = document.getElementById("appearance");
-    if (select) {
-      select.value = choice;
-      const label = select.closest("label");
-      label.title = "Appearance · " + select.selectedOptions[0].text;
+    const control = document.getElementById("appearance");
+    if (control) {
+      const dark = root.dataset.bsTheme === "dark";
+      control.title = dark ? "Switch to light mode" : "Switch to dark mode";
+      control.setAttribute("aria-label", control.title);
       const glyph = document.createElement("i");
-      glyph.dataset.lucide = { system: "monitor", light: "sun", dark: "moon" }[
-        choice
-      ];
+      glyph.dataset.lucide = dark ? "moon" : "sun";
       glyph.setAttribute("aria-hidden", "true");
-      label.querySelector("[data-lucide]").replaceWith(glyph);
-      window.lucide?.createIcons({ root: label });
+      control.replaceChildren(glyph);
+      window.lucide?.createIcons({ root: control });
     }
     window.dispatchEvent(new Event("forma:appearance"));
   }
@@ -40,11 +38,12 @@
     const control = document.getElementById("appearance");
     if (!control) return;
     apply(document.documentElement.dataset.appearance);
-    control.addEventListener("change", () => {
+    control.addEventListener("click", () => {
+      const choice = document.documentElement.dataset.bsTheme === "dark" ? "light" : "dark";
       try {
-        localStorage.setItem(storageKey, control.value);
+        localStorage.setItem(storageKey, choice);
       } catch {}
-      apply(control.value);
+      apply(choice);
     });
   });
 })();

@@ -34,9 +34,13 @@ async function layout(page, width, label) {
     path: path.join(out, label + "-" + width + "-" + theme + ".png"),
   });
 }
+async function setTheme(page, theme) {
+  if (await page.locator("html").getAttribute("data-bs-theme") !== theme)
+    await page.locator("#appearance").click();
+}
 async function bothThemes(page, width, label) {
   for (const choice of ["dark", "light"]) {
-    await page.locator("#appearance").selectOption(choice);
+    await setTheme(page, choice);
     assert.equal(
       await page.locator("html").getAttribute("data-bs-theme"),
       choice,
@@ -97,11 +101,31 @@ async function downloadAndCompare(page, period) {
     await page.locator(".product-card").first().waitFor();
     await page
       .locator(".product-photo img")
-      .evaluateAll((imgs) => Promise.all(imgs.map((img) => img.decode())));
+      .evaluateAll((imgs) => Promise.all(imgs.map((img) => {
+        img.loading = "eager";
+        return img.decode();
+      })));
     await page.evaluate(() => document.fonts.ready);
     assert.ok(await page.evaluate(() => document.fonts.check("16px Inter")));
     await page.keyboard.press("Tab");
     assert.equal(await page.locator(":focus").innerText(), "Skip to content");
+    const riser = page.getByRole("button", { name: "Preview Bridge Monitor Riser" });
+    await riser.click();
+    await page.getByRole("button", { name: "Previous photo" }).click();
+    await page.getByRole("button", { name: "Previous photo" }).press("ArrowRight");
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /riser\.webp$/);
+    await page.getByRole("button", { name: "Next photo" }).click();
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /riser-detail\.webp$/);
+    await page.getByRole("button", { name: "Bridge Monitor Riser · In use" }).click();
+    await page.locator("#previewPhoto").evaluate((img) => img.decode());
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /riser-workspace\.webp$/);
+    await page.keyboard.press("Escape");
+    await page.locator("#packPreview").waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "Preview Flute Ceramic Pen Cup" }).click();
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /pen-cup\.webp$/);
+    await page.waitForFunction(() => document.querySelector("#packPreview").contains(document.activeElement));
+    await page.keyboard.press("Escape");
+    await page.locator("#packPreview").waitFor({ state: "hidden" });
     await page.getByRole("heading", { name: "Product catalog" }).click();
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 920 });
@@ -112,7 +136,7 @@ async function downloadAndCompare(page, period) {
         await page.getByText("Lighting", { exact: true }).first().click();
         await page.getByRole("button", { name: "Show products" }).click();
         await page.waitForFunction(
-          () => document.querySelectorAll(".product-card").length === 1,
+          () => document.querySelectorAll(".product-card").length === 5,
         );
         await page.locator(".mobile-filter").click();
         await page.locator("#reset").click();
@@ -123,7 +147,8 @@ async function downloadAndCompare(page, period) {
       }
     }
     await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
-    await page.locator("#appearance").selectOption("system");
+    await page.evaluate(() => localStorage.removeItem("forma.appearance"));
+    await page.reload();
     assert.equal(
       await page.locator("html").getAttribute("data-bs-theme"),
       "dark",
@@ -132,7 +157,7 @@ async function downloadAndCompare(page, period) {
     await page.waitForFunction(
       () => document.documentElement.dataset.bsTheme === "light",
     );
-    await page.locator("#appearance").selectOption("dark");
+    await setTheme(page, "dark");
     await page.reload();
     assert.equal(
       await page.locator("html").getAttribute("data-bs-theme"),
@@ -187,6 +212,11 @@ async function downloadAndCompare(page, period) {
     await preview.focus();
     await page.keyboard.press("Enter");
     await page.getByRole("dialog").waitFor();
+    const detail = page.getByRole("button", { name: "Arc Task Lamp · Detail" });
+    await detail.focus();
+    await page.keyboard.press("Enter");
+    assert.equal(await detail.getAttribute("aria-pressed"), "true");
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /lamp-detail\.webp$/);
     await page.keyboard.press("Escape");
     await page.locator("#packPreview").waitFor({ state: "hidden" });
     assert.equal(
@@ -196,6 +226,7 @@ async function downloadAndCompare(page, period) {
     await page
       .getByRole("button", { name: "Arc Task Lamp", exact: true })
       .click();
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /lamp\.webp$/);
     await page.locator("#previewQty").fill("2");
     assert.equal(await page.locator("#previewUnits").innerText(), "4 units");
     assert.equal(await page.locator("#previewTotal").innerText(), "₱9,200");
@@ -305,7 +336,7 @@ async function downloadAndCompare(page, period) {
       await page.getByRole("button", { name: "Show all products" }).click();
       await page.getByRole("button", { name: "Overview", exact: true }).click();
       await page
-        .getByRole("button", { name: /Orders awaiting fulfillment/ })
+        .getByRole("button", { name: /Open orders/ })
         .click();
       assert.equal(await page.locator("#ordersView .fulfilled").count(), 0);
       await page.getByRole("button", { name: "Show all orders" }).click();
@@ -316,12 +347,20 @@ async function downloadAndCompare(page, period) {
         .locator("#productForm input[name=name]")
         .fill("Demo organizer");
       await page.locator("#productForm input[name=price]").fill("450.50");
+      await page.locator("#productForm input[type=file]").setInputFiles([
+        path.resolve("static/img/organizer.webp"),
+        path.resolve("static/img/organizer-detail.webp"),
+      ]);
       await page.getByRole("button", { name: "Save product" }).click();
       await page
         .locator(".inv-item")
         .filter({ hasText: "Demo organizer" })
         .waitFor();
+      await page.locator(".inv-item").filter({ hasText: "Demo organizer" }).locator("img")
+        .evaluate((img) => img.decode());
       await page.getByRole("button", { name: "Edit Demo organizer" }).click();
+      assert.equal(await page.locator("#currentProductPhotos img").count(), 2);
+      assert.match(await page.locator("#currentProductPhotos img").first().getAttribute("src"), /^\/media\/products\/[a-f0-9]{32}$/);
       await page
         .locator("#productForm input[name=name]")
         .fill("Studio organizer");
@@ -359,12 +398,19 @@ async function downloadAndCompare(page, period) {
       await page
         .getByRole("button", { name: "Edit Studio organizer" })
         .waitFor();
+      await page.getByRole("button", { name: "Delete Studio organizer" }).click();
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.locator("#deleteProductModal").waitFor({ state: "hidden" });
+      await page.getByRole("button", { name: "Delete Studio organizer" }).click();
+      await page.getByRole("button", { name: "Delete product", exact: true }).click();
+      await page.getByRole("button", { name: "Edit Studio organizer" }).waitFor({ state: "hidden" });
+      await page.locator("#deleteProductModal").waitFor({ state: "hidden" });
       await page.locator("[data-tab=fulfillment]").click();
       const card = page.locator(".order-card").filter({
         has: page.getByRole("heading", { name: "PO-" + order, exact: true }),
       });
-      await card.getByRole("button", { name: "Start processing" }).click();
-      await card.getByRole("button", { name: "Mark fulfilled" }).click();
+      await card.getByRole("button", { name: "Mark in transit" }).click();
+      await card.getByRole("button", { name: "Mark complete" }).click();
       await card.locator(".status.fulfilled").waitFor();
       await page.locator("[data-tab=overview]").click();
       await downloadAndCompare(page, "day");
@@ -400,7 +446,7 @@ async function downloadAndCompare(page, period) {
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 920 });
       for (const theme of ["light", "dark"]) {
-        await page.locator("#appearance").selectOption(theme);
+        await setTheme(page, theme);
         await buyAgain.focus();
         await page.keyboard.press("Enter");
         await review.locator(".repeat-line").first().waitFor();
@@ -499,7 +545,7 @@ async function downloadAndCompare(page, period) {
           .locator(".status")
           .innerText()
           .then((t) => t.toLowerCase()),
-        "received",
+        "order placed",
       );
       assert.equal(
         await page.getByRole("button", { name: /Buy Again/ }).count(),

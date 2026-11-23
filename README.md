@@ -6,7 +6,7 @@ Forma Trade is a local wholesale marketplace for workspace products. Retail buye
 
 ## Windows quick start
 
-1. Install PHP 8.1 or newer with PDO MySQL and mbstring, and a Windows MariaDB distribution with the server and database initializer. PHP must be on PATH.
+1. Install PHP 8.1 or newer with PDO MySQL, mbstring, and GD with WebP support, and a Windows MariaDB distribution with the server and database initializer. PHP must be on PATH.
 2. Double-click **start.cmd**. On first launch it creates the ignored local configuration, initializes a private database under `.runtime/mysql`, seeds the catalog, and starts the web server. Subsequent launches retain your orders. Allow the first initialization to finish.
 3. Open **http://127.0.0.1:8077/**. The catalog, images, Bootstrap, icons, and charts work offline.
 
@@ -29,15 +29,15 @@ Choose **Sign in → Use a demo account**, select an account, then sign in. All 
 
 1. Open the catalog. Filter by category, price, or rating, then reset. Add one Studio Mechanical Keyboard pack and one Arc Task Lamp pack.
 2. Open the cart. The original seed prices give subtotals of ₱8,900 and ₱4,600, for ₱13,500 in total. Sign in as North Retail from the cart and place the order. Read its PO number and the two supplier statuses.
-3. Sign in as Form Studio. Open **Orders**, locate the PO, start processing, and mark it fulfilled. View **Overview** and switch the sales chart between daily and monthly.
-4. Sign in as Field Objects. Its portion remains received. Fulfill it, then inspect the low-stock Lift Laptop Stand under **Inventory** and edit its alert threshold.
-5. Return to North Retail’s **Purchase orders** and find both fulfilled portions. Use the automated checks below to demonstrate a last-pack race and a price change without altering the presentation data.
+3. Sign in as Form Studio. Open **Orders**, locate the PO, mark it in transit, and mark it complete. View **Overview** and switch the sales chart between daily and monthly.
+4. Sign in as Field Objects. Its portion still shows **Order placed**. Select **Mark in transit**, then **Mark complete**, then inspect the low-stock Lift Laptop Stand under **Inventory** and edit its alert threshold.
+5. Return to North Retail’s **Purchase orders** and find both completed portions. Use the automated checks below to demonstrate a last-pack race and a price change without altering the presentation data.
 
 ### Pack preview, appearance, and reporting
 
-Open the product photo or name to compare its pack price, units per pack, and unit cost. Choose the number of packs to see total units and the extended price. The confirmation includes a **View cart** link. The header’s **Appearance** selector offers System, Light, and Dark. The selection persists across the buyer and vendor workspaces on the same browser.
+Open the product photo or name to compare its pack price, units per pack, and unit cost. Choose the number of packs to see total units and the extended price. The confirmation includes a **View cart** link. Use the thumbnails to view an overview, a detail, or the product in use. The round header button switches between light and dark, initially following your system setting. The selection persists across the buyer and vendor workspaces on the same browser.
 
-In the vendor overview, select a metric to see only low-stock products or outstanding orders. Use **Show all** to restore the full list. After fulfilling an order, choose the daily or monthly interval and select **Download CSV**. Open the file and compare its peso amounts with **View sales figures**. Each report contains only the signed-in vendor’s fulfilled sales.
+In the vendor overview, select a metric to see only low-stock products or open orders. Use **Show all** to restore the full list. After marking an order complete, choose the daily or monthly interval and select **Download CSV**. Open the file and compare its peso amounts with **View sales figures**. Each report contains only the signed-in vendor’s sales from completed orders.
 
 ### Buy Again
 
@@ -61,4 +61,4 @@ For browser checks, install Node.js and Playwright in your test environment, mak
 
 ## Repository handoff
 
-The project root contains the launcher, setup guide, and sample data. Submit the source including `backend`, `templates`, `static`, `docs`, and `tests`. The ignore file excludes local credentials, database files, and QA captures. The catalog supports six bundled photo choices for vendor-created products.
+The project root contains the launcher, setup guide, and sample data. Submit the source including `backend`, `templates`, `static`, `docs`, and `tests`. The ignore file excludes local credentials, database files, and QA captures. The demo includes 18 bundled galleries. In Vendor workspace → Inventory, select Add product and upload one to three JPEG, PNG, or WebP photos up to 2 MB each. The first photo becomes the cover. Editing a listing lets you keep or replace its gallery. Deleting a listing removes it from sale and preserves previous purchase orders.

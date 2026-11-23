@@ -17,7 +17,15 @@
   <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><span class="supplier">Pack details</span><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close pack preview"></button></div>
     <div class="modal-body preview-layout">
-      <img id="previewPhoto" alt="">
+      <div class="preview-gallery">
+        <div class="preview-image">
+          <img id="previewPhoto" alt="">
+          <button class="gallery-arrow gallery-prev" id="previewPrevPhoto" type="button" aria-label="Previous photo" hidden><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+          <button class="gallery-arrow gallery-next" id="previewNextPhoto" type="button" aria-label="Next photo" hidden><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+        </div>
+        <div id="previewThumbs" role="group" aria-label="Product photos"></div>
+        <span id="previewPhotoStatus" class="visually-hidden" aria-live="polite"></span>
+      </div>
       <div class="preview-info">
         <p class="supplier" id="previewSupplier"></p><h2 id="previewName"></h2>
         <dl class="pack-facts"><div><dt>Pack price</dt><dd id="previewPrice"></dd></div><div><dt>Units per pack</dt><dd id="previewSize"></dd></div><div><dt id="unitCostLabel">Unit cost</dt><dd id="previewUnit"></dd></div><div><dt>Available stock</dt><dd id="previewStock"></dd></div></dl>

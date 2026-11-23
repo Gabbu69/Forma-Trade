@@ -28,11 +28,11 @@ class Client:
         html = self.opener.open(self.url + "/login").read().decode()
         self.token = re.search(r'name="csrf-token" content="([^"]+)', html)[1]
 
-    def api(self, path, data=None, status=200, csrf=True):
+    def api(self, path, data=None, status=200, csrf=True, method=None):
         headers = {"Content-Type": "application/json"}
         if csrf:
             headers["X-CSRF-Token"] = self.token
-        request = urllib.request.Request(self.url+"/api/"+path, data=None if data is None else json.dumps(data).encode(), headers=headers)
+        request = urllib.request.Request(self.url+"/api/"+path, data=None if data is None else json.dumps(data).encode(), headers=headers, method=method)
         try:
             response = self.opener.open(request)
         except urllib.error.HTTPError as error:
@@ -52,6 +52,17 @@ def revenue(client, period="day"):
 
 def scenarios(urls):
     guest = Client(urls[0])
+    catalog = guest.api("catalog")
+    assert len(catalog) == 18
+    images = [key for product in catalog for key in product["images"]]
+    assert len(set(images)) == len(images) == 54
+    for product in catalog:
+        assert len(product["images"]) == 3 and product["images"][0] == product["image"]
+    for key in images:
+        with guest.opener.open(urls[0]+"/static/img/"+key+".webp") as response:
+            assert response.headers.get_content_type() == "image/webp"
+            assert response.read(12)[8:] == b"WEBP"
+    print("PASS repeatable 18-product setup and 54 local gallery photos")
     assert guest.opener.open(urls[0]+"/orders").geturl().startswith(urls[0]+"/login")
     guest.api("orders",status=401)
     guest.api("vendor/sales/export",status=401)
@@ -200,6 +211,47 @@ def reorder_scenarios(urls):
         edit(vendor,p["id"],price=p["price"],stock=p["stock"],pack_size=p["pack_size"])
     print("PASS Buy Again ownership, CSRF, caps, sold-out items, live conflicts, atomic merge, new quotes, skips and safe replay")
 
+def rating_scenarios(url):
+    buyer = Client(url).login("north")
+    other = Client(url).login("bay")
+    vendor = Client(url).login("form")
+    rows = buyer.api("orders")
+    line = next(row for row in rows if row["order_id"] == 1001 and row["product_id"] == 1)
+    pending = next(row for row in rows if row["status"] != "fulfilled")
+    rating = {"line_id": line["line_id"], "stars": 3}
+    other.api("orders/rating", rating, status=404)
+    vendor.api("orders/rating", rating, status=403)
+    buyer.api("orders/rating", rating, csrf=False, status=403)
+    buyer.api("orders/rating", {**rating, "stars": 6}, status=422)
+    buyer.api("orders/rating", {**rating, "line_id": pending["line_id"]}, status=409)
+    assert buyer.api("orders/rating", rating) == {"stars": 3}
+    assert buyer.api("orders/rating", {**rating, "stars": 1}) == {"stars": 1}
+    product = next(row for row in buyer.api("catalog") if row["id"] == 1)
+    assert float(product["rating"]) == 3
+    assert all(row["stars"] == 1 for row in buyer.api("orders") if row["product_id"] == 1)
+    print("PASS buyer ratings, fulfillment and ownership checks, updates and catalog average")
+
+def deletion_scenarios(url):
+    buyer = Client(url).login("north")
+    vendor = Client(url).login("form")
+    other = Client(url).login("field")
+    product = next(p for p in vendor.api("vendor/products") if p["id"] == 1)
+    request = {"id": product["id"], "version": product["version"]}
+    history = buyer.api("orders")
+    cart = buyer.api("cart", {"id": product["id"], "quantity": 1})
+    other.api("vendor/products", request, status=403, method="DELETE")
+    vendor.api("vendor/products", request, status=403, csrf=False, method="DELETE")
+    vendor.api("vendor/products", {**request, "version": request["version"] - 1}, status=409, method="DELETE")
+    assert vendor.api("vendor/products", request, method="DELETE")["ok"]
+    assert not any(p["id"] == product["id"] for p in buyer.api("catalog"))
+    assert not any(p["id"] == product["id"] for p in vendor.api("vendor/products"))
+    buyer.api("checkout", {"key": cart["key"]}, status=409)
+    assert not buyer.api("cart")["items"]
+    assert buyer.api("orders") == history
+    review = buyer.api("orders/1001/reorder")
+    assert next(line for line in review["lines"] if line["product_id"] == product["id"])["maximum"] == 0
+    print("PASS vendor deletion ownership, CSRF, edit versions, cart cleanup and historical purchases")
+
 def main():
     name="forma_qa_"+secrets.token_hex(6)
     def run(*args,env=None):
@@ -211,6 +263,7 @@ def main():
             config=Path(folder)/"test.env"
             config.write_text(re.sub(r"(?m)^DB_NAME=.*$", "DB_NAME="+name, (ROOT/".env").read_text(), count=1))
             env={**os.environ,"FORMA_ENV_FILE":str(config)}
+            run("backend/setup.php",env=env)
             run("backend/setup.php",env=env)
             urls=[]
             for _ in range(2):
@@ -227,6 +280,8 @@ def main():
             reorder_scenarios(urls)
             if "--browser" in sys.argv:
                 subprocess.run(["node","tests/browser.cjs",urls[0]],cwd=ROOT,env={**env,"TMP":folder,"TEMP":folder,"TMPDIR":folder},check=True)
+            rating_scenarios(urls[0])
+            deletion_scenarios(urls[0])
     finally:
         for server in servers:
             server.terminate();server.wait(timeout=10)

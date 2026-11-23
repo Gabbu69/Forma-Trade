@@ -55,17 +55,17 @@ function busy(control, label) {
     control.removeAttribute("aria-busy");
   };
 }
-async function api(path, body, signal) {
+async function api(path, body, signal, method = "POST") {
   const options = { signal, headers: { Accept: "application/json" } };
   if (body !== undefined)
     Object.assign(options, {
-      method: "POST",
+      method,
       headers: {
         ...options.headers,
-        "Content-Type": "application/json",
+        ...(body instanceof FormData ? {} : { "Content-Type": "application/json" }),
         "X-CSRF-Token": $("meta[name=csrf-token]").content,
       },
-      body: JSON.stringify(body),
+      body: body instanceof FormData ? body : JSON.stringify(body),
     });
   let response;
   try {
@@ -106,9 +106,14 @@ function group(rows, key) {
   }
   return [...groups.values()];
 }
+function photoUrl(key) {
+  return /^[0-9a-f]{32}$/.test(key)
+    ? "/media/products/" + key
+    : "/static/img/" + encodeURIComponent(key) + ".webp";
+}
 function photo(item, cls = "thumb") {
   return element("img", {
-    src: "/static/img/" + encodeURIComponent(item.image) + ".webp",
+    src: photoUrl(item.image),
     alt: item.name,
     class: cls,
     loading: "lazy",
@@ -194,7 +199,7 @@ function productCard(item) {
     }
   };
   const available = Number(item.stock) > 0;
-  const add = button(icon("plus"), added, "add", {
+  const add = button(icon("shopping-cart"), added, "add", {
     title: "Add a pack to cart",
     "aria-label": "Add one pack of " + item.name,
     disabled: !available,
@@ -273,9 +278,37 @@ let previewItem, previewTrigger;
 function openPreview(item, trigger) {
   previewItem = item;
   previewTrigger = trigger;
-  $("#previewPhoto").src =
-    "/static/img/" + encodeURIComponent(item.image) + ".webp";
-  $("#previewPhoto").alt = item.name;
+  const thumbs = $("#previewThumbs");
+  const mainPhoto = $("#previewPhoto");
+  const prev = $("#previewPrevPhoto"), next = $("#previewNextPhoto");
+  const keys = item.images || [item.image];
+  const views = ["Overview", "Detail", "In use"];
+  let current = 0;
+  const labels = keys.map((_, index) => item.name + " · " +
+    (item.uploaded_photos ? "Photo " + (index + 1) : views[index]));
+  function selectPhoto(index) {
+    current = (index + keys.length) % keys.length;
+    mainPhoto.src = photoUrl(keys[current]);
+    mainPhoto.alt = labels[current];
+    $("#previewPhotoStatus").textContent = keys.length > 1 ? "Photo " + (current + 1) + " of " + keys.length : "";
+    for (const [position, thumb] of [...thumbs.children].entries())
+      thumb.setAttribute("aria-pressed", String(position === current));
+  }
+  thumbs.hidden = prev.hidden = next.hidden = keys.length < 2;
+  thumbs.replaceChildren(...keys.map((key, index) =>
+    button(element("img", { src: photoUrl(key), alt: "" }), () => selectPhoto(index), "gallery-thumb", {
+      "aria-label": labels[index],
+      "aria-pressed": "false",
+    }),
+  ));
+  prev.onclick = () => selectPhoto(current - 1);
+  next.onclick = () => selectPhoto(current + 1);
+  $(".preview-gallery").onkeydown = (event) => {
+    if (keys.length < 2 || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    event.preventDefault();
+    selectPhoto(current + (event.key === "ArrowRight" ? 1 : -1));
+  };
+  selectPhoto(0);
   $("#previewSupplier").textContent = item.vendor;
   $("#previewName").textContent = item.name;
   $("#previewPrice").textContent = peso(item.price);
@@ -566,6 +599,47 @@ let vendorProducts = [],
   vendorOrders = [],
   chart = null,
   editProduct = null;
+function orderRating(line) {
+  const rating = element("fieldset", {
+    class: "rating-stars",
+    "data-rating-product": line.product_id,
+  }, element("legend", { class: "visually-hidden" }, "Rating for " + line.title));
+  for (let stars = 1; stars <= 5; stars++) {
+    rating.append(element("label", { class: "rating-star" },
+      element("input", { class: "visually-hidden", type: "radio", name: "stars",
+        value: stars, required: true, checked: Number(line.stars) === stars,
+        "aria-label": stars + (stars === 1 ? " star" : " stars") }),
+      icon("star"),
+    ));
+  }
+  const save = element("button", { type: "submit", class: "secondary" }, "Save rating");
+  const form = element("form", { class: "order-rating" }, rating, save);
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const stars = Number(new FormData(form).get("stars"));
+    const restore = busy(save, "Saving…");
+    rating.disabled = true;
+    try {
+      const result = await api("orders/rating", { line_id: line.line_id, stars });
+      document.querySelectorAll('[data-rating-product="' + line.product_id + '"]').forEach((group) => {
+        if (!group.disabled || group === rating)
+          group.querySelector('input[value="' + result.stars + '"]').checked = true;
+      });
+      note("Rating saved.");
+    } catch (error) {
+      note(error.message, "error");
+    } finally {
+      rating.disabled = false;
+      restore();
+    }
+  };
+  return form;
+}
+const orderStatusLabels = {
+  received: "Order placed",
+  processing: "In Transit",
+  fulfilled: "Completed",
+};
 function renderOrders(rows, vendor = false) {
   const host = $("#ordersView");
   host.replaceChildren();
@@ -600,7 +674,7 @@ function renderOrders(rows, vendor = false) {
           "div",
           { class: "status-line mt-3" },
           element("strong", {}, vendor ? row.buyer : row.vendor),
-          element("span", { class: "status " + row.status }, row.status),
+          element("span", { class: "status " + row.status }, orderStatusLabels[row.status]),
         );
       box.append(header);
       for (const l of lines)
@@ -619,19 +693,20 @@ function renderOrders(rows, vendor = false) {
               ),
             ),
             element("strong", {}, peso(lineTotal(l) / 100)),
+            !vendor && row.status === "fulfilled" ? orderRating(l) : null,
           ),
         );
       if (vendor && row.status !== "fulfilled") {
         const status = row.status === "received" ? "processing" : "fulfilled";
         box.append(
           button(
-            status === "processing" ? "Start processing" : "Mark fulfilled",
+            status === "processing" ? "Mark in transit" : "Mark complete",
             async (event) => {
               const restore = busy(event.currentTarget, "Updating…");
               try {
                 await api("vendor/orders", { id: row.group_id, status });
                 await loadVendor();
-                note("Fulfillment status updated.");
+                note("Order status updated.");
                 const nextAction = document.querySelector(
                   '[data-group="' + row.group_id + '"]',
                 );
@@ -666,6 +741,7 @@ function renderOrders(rows, vendor = false) {
     }
     host.append(box);
   }
+  icons();
 }
 function setTab(name, filtered = false) {
   vendorFilter = filtered ? name : "";
@@ -677,7 +753,17 @@ function setTab(name, filtered = false) {
   }
   if (name === "overview") chart?.resize();
 }
-let editorTrigger;
+let editorTrigger, deleteTarget, deleteTrigger;
+function openDelete(product, trigger) {
+  deleteTarget = product;
+  deleteTrigger = trigger;
+  $("#deleteProductMessage").textContent =
+    "Remove " + product.name + " from your catalog? Previous purchase orders will keep their records.";
+  const form = $("#deleteProductForm");
+  form.querySelector(".form-error").textContent = "";
+  form.querySelector('[type="submit"]').disabled = false;
+  bootstrap.Modal.getOrCreateInstance($("#deleteProductModal")).show();
+}
 function openProduct(p = null) {
   editorTrigger = document.activeElement;
   editProduct = p;
@@ -690,6 +776,17 @@ function openProduct(p = null) {
   ))
     if (form.elements.namedItem(key))
       form.elements.namedItem(key).value = value;
+  const fileInput = form.elements.namedItem("photos[]");
+  fileInput.required = !p;
+  fileInput.setCustomValidity("");
+  const photos = $("#currentProductPhotos");
+  photos.hidden = !p;
+  photos.replaceChildren(...(p?.images ?? []).map((image, index) =>
+    element("img", { src: photoUrl(image), alt: "Current photo " + (index + 1) }),
+  ));
+  $("#photoHelp").textContent = p
+    ? "Choose up to 3 photos to replace this gallery. JPEG, PNG, or WebP, 2 MB each."
+    : "Add up to 3 JPEG, PNG, or WebP photos, 2 MB each. The first is the cover.";
   bootstrap.Modal.getOrCreateInstance($("#productModal")).show();
 }
 function offerInventoryReview(form, latest) {
@@ -791,7 +888,7 @@ async function loadSales() {
       labels: data.map((x) => x.label),
       datasets: [
         {
-          label: "Fulfilled sales",
+          label: "Sales from completed orders",
           data: data.map((x) => x.amount),
           backgroundColor: "#4774e7",
           borderRadius: 5,
@@ -858,7 +955,7 @@ function renderVendorLists() {
       "panel metric-button",
     );
   $("#metrics").replaceChildren(
-    metric(pending, "Orders awaiting fulfillment", "fulfillment"),
+    metric(pending, "Open orders", "fulfillment"),
     metric(low, "Products at or below stock threshold", "inventory"),
   );
   $("#inventoryFilter").hidden = vendorFilter !== "inventory";
@@ -891,9 +988,17 @@ function renderVendorLists() {
             ? element("small", { class: "d-block text-danger" }, "Low stock")
             : null,
         ),
-        button("Edit", () => openProduct(p), "secondary", {
-          "aria-label": "Edit " + p.name,
-        }),
+        element(
+          "div",
+          { class: "inventory-actions" },
+          button("Edit", () => openProduct(p), "secondary", {
+            "aria-label": "Edit " + p.name,
+          }),
+          button(icon("trash-2"), (event) => openDelete(p, event.currentTarget), "danger-button", {
+            "aria-label": "Delete " + p.name,
+            title: "Delete product",
+          }),
+        ),
       ),
     ),
   );
@@ -913,7 +1018,7 @@ function renderVendorLists() {
   renderOrders(orders, true);
   if (!orders.length && vendorFilter === "fulfillment")
     $("#ordersView").replaceChildren(
-      empty("All caught up", "There are no orders awaiting fulfillment."),
+      empty("All caught up", "There are no open orders."),
     );
   icons();
 }
@@ -993,6 +1098,47 @@ async function init() {
       else $("#addProduct").focus();
     });
     $("#addProduct").onclick = () => openProduct();
+    $("#productForm input[type=file]").onchange = (event) => {
+      const field = event.currentTarget;
+      const files = [...field.files];
+      const error = files.length > 3 ? "Choose up to three photos."
+        : files.some((file) => file.size > 2 * 1024 * 1024) ? "Each photo must be 2 MB or smaller."
+        : "";
+      field.setCustomValidity(error);
+      if (error) field.reportValidity();
+    };
+    const deleteModal = $("#deleteProductModal");
+    const deleteForm = $("#deleteProductForm");
+    deleteModal.addEventListener("hidden.bs.modal", () => {
+      if (deleteTrigger?.isConnected) deleteTrigger.focus();
+      else $("#addProduct").focus();
+    });
+    deleteForm.onsubmit = async (event) => {
+      event.preventDefault();
+      const { id, version } = deleteTarget;
+      const submit = deleteForm.querySelector('[type="submit"]');
+      const feedback = deleteForm.querySelector(".form-error");
+      const restore = busy(submit, "Deleting…");
+      const holdOpen = (hide) => hide.preventDefault();
+      deleteModal.addEventListener("hide.bs.modal", holdOpen);
+      let refreshRequired = false;
+      try {
+        await api("vendor/products", { id, version }, undefined, "DELETE");
+        vendorProducts = vendorProducts.filter((product) => product.id !== id);
+        renderVendorLists();
+        deleteModal.removeEventListener("hide.bs.modal", holdOpen);
+        bootstrap.Modal.getInstance(deleteModal).hide();
+        note("Product deleted.");
+      } catch (error) {
+        refreshRequired = [404, 409].includes(error.status);
+        feedback.textContent = refreshRequired ? error.message + " Close this dialog to continue." : error.message;
+        if (refreshRequired) await loadVendor().catch((err) => note(err.message, "error"));
+      } finally {
+        deleteModal.removeEventListener("hide.bs.modal", holdOpen);
+        restore();
+        submit.disabled = refreshRequired;
+      }
+    };
     $("#period").onchange = () =>
       loadSales().catch((e) => note(e.message, "error"));
     $("#productForm").onsubmit = async (e) => {
@@ -1001,15 +1147,18 @@ async function init() {
         btn = form.querySelector('button[type="submit"]');
       const restore = busy(btn, "Saving product…");
       form.querySelector(".form-error").textContent = "";
-      const data = Object.fromEntries(new FormData(form));
-      if (editProduct)
-        Object.assign(data, {
-          id: editProduct.id,
-          version: editProduct.version,
-        });
+      const holdOpen = (event) => event.preventDefault();
+      const modal = $("#productModal");
+      modal.addEventListener("hide.bs.modal", holdOpen);
+      const data = new FormData(form);
+      if (editProduct) {
+        data.set("id", editProduct.id);
+        data.set("version", editProduct.version);
+      }
       try {
         await api("vendor/products", data);
-        bootstrap.Modal.getInstance($("#productModal")).hide();
+        modal.removeEventListener("hide.bs.modal", holdOpen);
+        bootstrap.Modal.getInstance(modal).hide();
         note("Product saved.");
         try {
           await loadVendor();
@@ -1021,7 +1170,7 @@ async function init() {
         }
       } catch (err) {
         form.querySelector(".form-error").textContent = err.message;
-        if (err.status === 409) {
+        if (err.status === 409 && editProduct) {
           try {
             await loadVendor();
             const latest = vendorProducts.find((p) => p.id === editProduct.id);
@@ -1031,6 +1180,7 @@ async function init() {
           }
         }
       } finally {
+        modal.removeEventListener("hide.bs.modal", holdOpen);
         restore();
       }
     };

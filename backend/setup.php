@@ -12,6 +12,10 @@ try {
             sql($db,'INSERT INTO users(id,email,password_hash,name,role) VALUES(?,?,?,?,?)',[$index+1,$login.'@forma.test',password_hash('FormaDemo24!',PASSWORD_BCRYPT),$name,$role]);
         $db->exec(file_get_contents(ROOT.'/database_seed.sql'));
     }
+    if (!sql($db, 'SELECT name FROM demo_updates WHERE name=?', ['workspace-collection'])->fetch()) {
+        $db->exec(file_get_contents(ROOT.'/backend/config/workspace_collection.sql'));
+        sql($db, 'INSERT INTO demo_updates(name) VALUES(?)', ['workspace-collection']);
+    }
     $db->commit();
 } catch(Throwable $e) { $db->rollBack(); throw $e; }
 echo "Database connection and demo catalog verified.\n";

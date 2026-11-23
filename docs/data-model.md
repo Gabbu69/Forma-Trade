@@ -6,6 +6,8 @@ erDiagram
     CATEGORIES ||--o{ PRODUCTS : classifies
     USERS ||--o{ REVIEWS : rates
     PRODUCTS ||--o{ REVIEWS : receives
+    PRODUCTS ||--o{ PRODUCT_PHOTOS : displays
+    PRODUCTS ||--o| RETIRED_PRODUCTS : retires
     USERS ||--o{ ORDERS : places
     ORDERS ||--|{ VENDOR_ORDERS : contains
     USERS ||--o{ VENDOR_ORDERS : fulfills
@@ -18,6 +20,8 @@ erDiagram
 | users | id, unique email | Buyer or supplier identity, role, bcrypt hash |
 | categories | id, unique name | Reusable product categories |
 | products | id | Supplier, category, pack terms, price, stock, alert threshold, edit version |
+| product_photos | photo_key, unique product_id + position | Gallery order and WebP image data |
+| retired_products | product_id | Catalog deletion marker that preserves historical references |
 | reviews | product_id + buyer_id | One rating per buyer and product |
 | orders | id, unique buyer_id + request_key | Buyer, purchase timestamp, replay identity |
 | vendor_orders | id, unique order_id + vendor_id | Supplier-specific fulfillment and completion time |

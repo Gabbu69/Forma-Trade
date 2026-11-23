@@ -12,8 +12,20 @@ if (str_starts_with($path,'/static/')) {
 }
 require __DIR__.'/app/Access.php';
 require __DIR__.'/app/Catalog.php';
+require __DIR__.'/app/ProductPhotos.php';
 require __DIR__.'/app/Purchases.php';
 require __DIR__.'/app/Reorders.php';
+if (preg_match('#^/media/products/([0-9a-f]{32})$#D', $path, $photo)) {
+    if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'HEAD'], true)) { http_response_code(405); exit; }
+    $bytes = sql(Database::connect(), 'SELECT image_bytes FROM product_photos WHERE photo_key=?', [$photo[1]])->fetchColumn();
+    if ($bytes === false) { http_response_code(404); exit; }
+    header('Content-Type: image/webp');
+    header('X-Content-Type-Options: nosniff');
+    header('Content-Length: '.strlen($bytes));
+    header('Cache-Control: no-cache');
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') echo $bytes;
+    exit;
+}
 Access::start();
 header('X-Forma-Application: marketplace');
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
@@ -25,16 +37,23 @@ try {
     if ($api) {
         $method=$_SERVER['REQUEST_METHOD']; $body=[];
         $routes=['/api/catalog'=>['GET',null],'/api/login'=>['POST',null],'/api/logout'=>['POST',null],
-            '/api/cart'=>['GET,POST','shopping'],'/api/checkout'=>['POST','buyer'],'/api/orders'=>['GET','buyer'],
-            '/api/vendor/products'=>['GET,POST','vendor'],'/api/vendor/orders'=>['GET,POST','vendor'],'/api/vendor/sales'=>['GET','vendor'],'/api/vendor/sales/export'=>['GET','vendor']];
+            '/api/cart'=>['GET,POST','shopping'],'/api/checkout'=>['POST','buyer'],'/api/orders'=>['GET','buyer'],'/api/orders/rating'=>['POST','buyer'],
+            '/api/vendor/products'=>['GET,POST,DELETE','vendor'],'/api/vendor/orders'=>['GET,POST','vendor'],'/api/vendor/sales'=>['GET','vendor'],'/api/vendor/sales/export'=>['GET','vendor']];
         $reorderRoute = preg_match('#^/api/orders/([1-9][0-9]{0,9})/reorder$#D', $path, $match);
         if ($reorderRoute) $routes[$path] = ['GET,POST','buyer'];
         [$methods,$role]=$routes[$path]??reject(404,'Endpoint unavailable.');
         if (!in_array($method,explode(',',$methods),true)) reject(405,'Unsupported request method.');
         if ($role==='shopping' && isset($_SESSION['user'])) Access::role('buyer');
         elseif (in_array($role,['buyer','vendor'],true)) Access::role($role);
-        if ($method==='POST') {
-            Access::csrf();
+        if ($method !== 'GET') Access::csrf();
+        $multipart = $method === 'POST' && $path === '/api/vendor/products'
+            && str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data;');
+        if ($multipart) {
+            if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 7 * 1024 * 1024 || (!$_POST && !$_FILES)) {
+                reject(413,'The upload is too large. Use up to three photos at 2 MB each.');
+            }
+            $body = $_POST;
+        } elseif ($method !== 'GET') {
             $input=file_get_contents('php://input',false,null,0,32769);
             if (strlen($input)>32768) reject(413,'Request too large.');
             $body=json_decode($input,true);
@@ -55,8 +74,18 @@ try {
             case '/api/logout': $_SESSION=[]; session_destroy(); jsonOut(['ok'=>true]);
             case '/api/cart': jsonOut($method==='POST'?$purchases->update($body):$purchases->cart());
             case '/api/checkout': jsonOut(['order_id'=>$purchases->checkout($user['id'],$body)]);
+            case '/api/orders/rating': jsonOut(['stars'=>$purchases->rate($user['id'],$body)]);
             case '/api/orders': jsonOut($purchases->history($user));
-            case '/api/vendor/products': jsonOut($method==='POST'?['id'=>$catalog->save($user['id'],$body)]:$catalog->products([],$user['id']));
+            case '/api/vendor/products':
+                if ($method === 'POST') {
+                    $photos = $multipart ? ProductPhotos::uploads($_FILES['photos'] ?? null) : [];
+                    jsonOut(['id'=>$catalog->save($user['id'], $body, $photos)]);
+                }
+                if ($method === 'DELETE') {
+                    $catalog->delete($user['id'], $body);
+                    jsonOut(['ok'=>true]);
+                }
+                jsonOut($catalog->products([], $user['id']));
             case '/api/vendor/orders': if ($method==='POST') $purchases->advance($user['id'],$body); jsonOut($purchases->history($user));
             case '/api/vendor/sales':
             case '/api/vendor/sales/export':
