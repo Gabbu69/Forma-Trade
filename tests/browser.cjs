@@ -387,6 +387,128 @@ async function downloadAndCompare(page, period) {
       await page.setViewportSize({ width, height: 920 });
       await bothThemes(page, width, "history");
     }
+    const repeatCard = page
+      .locator(".order-card")
+      .filter({
+        has: page.getByRole("heading", { name: "PO-1001", exact: true }),
+      });
+    const buyAgain = repeatCard.getByRole("button", { name: /Buy Again/ });
+    const review = page.locator("#reorderForm");
+    const cartBefore = await page.evaluate(async () =>
+      (await fetch("/api/cart")).json(),
+    );
+    for (const width of [375, 768, 1440]) {
+      await page.setViewportSize({ width, height: 920 });
+      for (const theme of ["light", "dark"]) {
+        await page.locator("#appearance").selectOption(theme);
+        await buyAgain.focus();
+        await page.keyboard.press("Enter");
+        await review.locator(".repeat-line").first().waitFor();
+        assert.equal(await review.locator(".repeat-vendor").count(), 2);
+        assert.ok(
+          await review
+            .locator(".modal-body")
+            .evaluate((el) => el.scrollWidth <= el.clientWidth),
+        );
+        await layout(page, width, "buy-again");
+        await page.keyboard.press("Escape");
+        await review.waitFor({ state: "hidden" });
+        assert.ok(
+          await buyAgain.evaluate((el) => el === document.activeElement),
+        );
+      }
+    }
+    assert.deepEqual(
+      await page.evaluate(async () => (await fetch("/api/cart")).json()),
+      cartBefore,
+    );
+    await buyAgain.click();
+    await review.getByRole("spinbutton", { name: /Keyboard/ }).fill("1");
+    const supplierPage = await browser.newPage();
+    await signIn(supplierPage, "field");
+    await supplierPage.evaluate(async () => {
+      const products = await (await fetch("/api/vendor/products")).json();
+      const lamp = products.find((p) => p.id === 2);
+      const response = await fetch("/api/vendor/products", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]')
+            .content,
+        },
+        body: JSON.stringify({ ...lamp, stock: 2 }),
+      });
+      if (!response.ok) throw Error("Could not prepare stock change");
+    });
+    await supplierPage.close();
+    await review
+      .getByRole("button", { name: "Add selected packs to cart" })
+      .click();
+    await review.locator(".repeat-changed").waitFor();
+    assert.equal(
+      await review.getByRole("spinbutton", { name: /Lamp/ }).inputValue(),
+      "2",
+    );
+    assert.equal(
+      await review.getByRole("spinbutton", { name: /Keyboard/ }).inputValue(),
+      "1",
+    );
+    assert.deepEqual(
+      await page.evaluate(async () => (await fetch("/api/cart")).json()),
+      cartBefore,
+    );
+    // Lose the response after the server accepted the batch, then retry in the modal.
+    await page.route(
+      "**/api/orders/1001/reorder",
+      async (route) => {
+        const response = await route.fetch();
+        assert.equal(response.status(), 200);
+        await route.abort();
+      },
+      { times: 1 },
+    );
+    await review
+      .getByRole("button", { name: "Add selected packs to cart" })
+      .click();
+    await review.getByRole("button", { name: "Retry confirmation" }).click();
+    await page.waitForURL(base + "/cart");
+    await page.locator(".cart-row").first().waitFor();
+    assert.equal(await page.locator("#cartCount").innerText(), "3");
+    await page.getByRole("button", { name: "Place purchase order" }).click();
+    await page.locator(".success-note").waitFor();
+    const repeated = new URL(page.url()).searchParams.get("placed");
+    assert.ok(repeated && repeated !== "1001");
+    assert.equal(await repeatCard.locator(".fulfilled").count(), 2);
+    for (const vendor of ["form", "field"]) {
+      await page.locator("#logout").click();
+      await page.waitForURL(base + "/");
+      await signIn(page, vendor);
+      await page.locator("[data-tab=fulfillment]").click();
+      const portion = page
+        .locator(".order-card")
+        .filter({
+          has: page.getByRole("heading", {
+            name: "PO-" + repeated,
+            exact: true,
+          }),
+        });
+      await portion.waitFor();
+      assert.equal(await portion.locator(".order-row").count(), 1);
+      assert.equal(
+        await portion
+          .locator(".status")
+          .innerText()
+          .then((t) => t.toLowerCase()),
+        "received",
+      );
+      assert.equal(
+        await page.getByRole("button", { name: /Buy Again/ }).count(),
+        0,
+      );
+    }
+    console.log(
+      "PASS browser Buy Again, cancellation and focus, both themes at three widths, stock conflict, interrupted confirmation and two-vendor checkout",
+    );
     assert.deepEqual(remote, []);
     assert.deepEqual(errors, []);
     console.log(

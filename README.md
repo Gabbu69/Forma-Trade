@@ -37,6 +37,10 @@ Open the product photo or name to compare its pack price, units per pack, and un
 
 In the vendor overview, select a metric to see only low-stock products or outstanding orders. Use **Show all** to restore the full list. After fulfilling an order, choose the daily or monthly interval and select **Download CSV**. Open the file and compare its peso amounts with **View sales figures**. Each report contains only the signed-in vendor’s fulfilled sales.
 
+### Buy Again
+
+From **Purchase orders**, choose **Buy Again** on a previous PO. Review current prices and pack sizes by supplier, adjust quantities, and set a line to zero to skip it. Confirm to merge the selection into your cart. Place the new PO through checkout. North Retail’s seeded PO-1001 provides a two-supplier example.
+
 ## Architecture and documentation
 
 The PHP front controller dispatches page and JSON routes through session, role, and CSRF checks. Catalog and purchase services use PDO prepared statements and InnoDB. Templates render the layout. Vanilla JavaScript fetches data and updates catalog cards, cart lines, order statuses, and Chart.js datasets. The router serves only approved static asset types under the static directory.

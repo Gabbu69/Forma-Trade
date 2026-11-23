@@ -35,3 +35,8 @@ const result = await fetch('/api/checkout', {
 ```
 
 An order's total equals the sum of purchase-time unit_price × quantity for each returned line. Both daily and monthly revenue count only fulfilled supplier portions, using fulfilled_at in Asia/Manila time.
+### Reordering from purchase history
+
+Buyers can fetch `GET /api/orders/{id}/reorder` for their own PO. The response contains a review token and historical lines with the original supplier, current catalog terms, available stock, cart quote, maximum additional packs, and suggested quantity.
+
+Send the token and an `items` array of positive integer `line_id` and `quantity` pairs to `POST /api/orders/{id}/reorder` with the session CSRF header. Omit skipped lines. Confirmation updates the cart in one batch and returns the pack count added. An identical retry with the same token returns the same acknowledgment. A 409 response with a new review requires confirmation of updated terms. Expired tokens require opening a fresh review. Checkout separately places the new PO and deducts inventory.

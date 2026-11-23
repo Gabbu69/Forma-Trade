@@ -13,6 +13,7 @@ if (str_starts_with($path,'/static/')) {
 require __DIR__.'/app/Access.php';
 require __DIR__.'/app/Catalog.php';
 require __DIR__.'/app/Purchases.php';
+require __DIR__.'/app/Reorders.php';
 Access::start();
 header('X-Forma-Application: marketplace');
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
@@ -26,6 +27,8 @@ try {
         $routes=['/api/catalog'=>['GET',null],'/api/login'=>['POST',null],'/api/logout'=>['POST',null],
             '/api/cart'=>['GET,POST','shopping'],'/api/checkout'=>['POST','buyer'],'/api/orders'=>['GET','buyer'],
             '/api/vendor/products'=>['GET,POST','vendor'],'/api/vendor/orders'=>['GET,POST','vendor'],'/api/vendor/sales'=>['GET','vendor'],'/api/vendor/sales/export'=>['GET','vendor']];
+        $reorderRoute = preg_match('#^/api/orders/([1-9][0-9]{0,9})/reorder$#D', $path, $match);
+        if ($reorderRoute) $routes[$path] = ['GET,POST','buyer'];
         [$methods,$role]=$routes[$path]??reject(404,'Endpoint unavailable.');
         if (!in_array($method,explode(',',$methods),true)) reject(405,'Unsupported request method.');
         if ($role==='shopping' && isset($_SESSION['user'])) Access::role('buyer');
@@ -38,6 +41,14 @@ try {
             if (!is_array($body)) reject(422,'Send a JSON object.');
         }
         $user=$_SESSION['user']??null;
+        if ($reorderRoute) {
+            $reorders = new Reorders($db);
+            $order = (int)$match[1];
+            if ($method === 'GET') jsonOut($reorders->preview($user['id'], $order));
+            $result = $reorders->confirm($user['id'], $order, $body);
+            if (isset($result['error'])) http_response_code(409);
+            jsonOut($result);
+        }
         switch ($path) {
             case '/api/catalog': jsonOut($catalog->products($_GET));
             case '/api/login': jsonOut(Access::login($db,$body));

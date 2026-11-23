@@ -1541,3 +1541,123 @@ button[aria-busy="true"] {
   fill: #edbd68;
   stroke: #edbd68;
 }
+.reorder-trigger {
+  margin: 12px 0 0 auto;
+}
+.repeat-vendor + .repeat-vendor {
+  margin-top: 24px;
+}
+.repeat-vendor h3 {
+  font-size: 1.12rem;
+  font-weight: 650;
+  margin-bottom: 10px;
+}
+.repeat-line {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.repeat-line h4 {
+  font-size: 1.05rem;
+  font-weight: 650;
+  margin: 0;
+}
+.repeat-line .muted {
+  font-size: 0.875rem;
+  margin: 4px 0 12px;
+}
+.repeat-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.repeat-facts dt {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.repeat-facts dd {
+  font-weight: 600;
+  margin: 2px 0 0;
+}
+.repeat-facts dd,
+.repeat-line-total,
+.repeat-subtotal strong,
+.reorder-total strong {
+  font-variant-numeric: tabular-nums;
+}
+.repeat-choice,
+.repeat-subtotal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.repeat-choice {
+  font-size: 0.9rem;
+}
+.repeat-choice input {
+  width: 5.5rem;
+}
+.repeat-line-total {
+  margin-left: auto;
+  font-weight: 650;
+}
+.repeat-subtotal {
+  justify-content: space-between;
+  font-size: 0.9rem;
+  padding: 4px 2px;
+}
+.repeat-combined:empty {
+  display: none;
+}
+.repeat-line .repeat-combined {
+  margin: 12px 0 0;
+}
+.repeat-warning,
+#reorderFeedback:not(:empty) {
+  background: var(--blue-wash);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.875rem;
+}
+.repeat-changed {
+  border-color: var(--blue);
+}
+#reorderFeedback:not(:empty) {
+  margin-bottom: 14px;
+}
+#reorderFeedback a {
+  color: var(--blue);
+  text-decoration: underline;
+}
+.reorder-total {
+  display: grid;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.reorder-total strong {
+  color: var(--ink);
+  font-size: 1.25rem;
+}
+@media (max-width: 600px) {
+  .repeat-facts {
+    grid-template-columns: 1fr 1fr;
+  }
+  .reorder-footer {
+    gap: 4px;
+  }
+  .reorder-footer .reorder-total {
+    flex: 1 0 100%;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+  .repeat-line {
+    padding: 12px;
+  }
+}

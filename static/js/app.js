@@ -80,6 +80,7 @@ async function api(path, body, signal) {
   if (!response.ok) {
     const error = new Error(data.error || "Please try again.");
     error.status = response.status;
+    error.review = data.review;
     throw error;
   }
   return data;
@@ -653,6 +654,16 @@ function renderOrders(rows, vendor = false) {
     box.append(
       element("div", { class: "order-total" }, "Total " + peso(sum(order))),
     );
+    if (!vendor) {
+      box.append(
+        button(
+          "Buy Again",
+          (event) => openReorder(first.order_id, event.currentTarget),
+          "secondary reorder-trigger",
+          { "aria-label": "Buy Again · " + number },
+        ),
+      );
+    }
     host.append(box);
   }
 }
