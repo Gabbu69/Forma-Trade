@@ -1,0 +1,6 @@
+.env
+.runtime/
+node_modules/
+__pycache__/
+.product-sheet.b64
+*.log

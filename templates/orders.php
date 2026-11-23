@@ -1,0 +1,1 @@
+<div class="page-title"><a class="back" href="/"><i data-lucide="chevron-left"></i> Marketplace</a><h1>Purchase orders</h1><p><?=h($user['name'])?> · Fulfillment by supplier</p></div><div id="confirmation"></div><div id="ordersView"></div>
