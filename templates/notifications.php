@@ -1,5 +1,6 @@
 <?php
 $notificationCopy = [
+    'low_stock'=>['package','Low stock','is at or below its stock threshold.'],
     'new_order'=>['package-plus','New purchase order','placed an order from your catalog.'],
     'processing'=>['truck','Order in transit','marked your shipment in transit.'],
     'fulfilled'=>['package-check','Order completed','completed your shipment.'],
@@ -13,20 +14,27 @@ $notificationCopy = [
   <section class="panel account-panel notification-panel" aria-labelledby="activityHeading">
     <div class="notification-heading">
       <h2 id="activityHeading">Recent activity</h2>
-      <?php if ($notifications): ?>
+      <?php if ($latestNotification): ?>
         <div class="notification-heading-actions">
-        <button type="button" class="secondary" id="readNotifications" data-through="<?=h($notifications[0]['id'])?>" <?=$unreadNotifications?'':'disabled'?>>Mark all as read</button>
+        <button type="button" class="secondary" id="readNotifications" data-through="<?=h($latestNotification)?>" <?=$unreadNotifications?'':'disabled'?>>Mark all as read</button>
         <button type="button" class="secondary notification-delete-all" id="deleteAllNotifications" data-bs-toggle="modal" data-bs-target="#deleteNotificationsModal">Delete all</button>
         </div>
       <?php endif; ?>
     </div>
-    <p class="muted" id="notificationsEmpty" tabindex="-1"<?=$notifications?' hidden':''?>>Order updates will appear here.</p>
+    <nav class="notification-heading-actions mb-3" aria-label="Notification filters">
+      <a class="secondary" href="/notifications" <?=$unreadOnly?'':'aria-current="page"'?>>All notifications</a>
+      <a class="secondary" href="/notifications?unread=1" <?=$unreadOnly?'aria-current="page"':''?>>Unread only</a>
+    </nav>
+    <p class="muted" id="notificationsEmpty" tabindex="-1"<?=$notifications?' hidden':''?>><?=$unreadOnly?'No unread notifications.':'Order updates will appear here.'?></p>
     <?php if ($notifications): ?>
       <ul class="notification-list">
         <?php foreach ($notifications as $item):
             [$icon,$title,$action] = $notificationCopy[$item['event_type']];
             $vendorNotice = $item['event_type'] === 'new_order';
-            $other = $vendorNotice ? $item['buyer'] : $item['vendor'];
+            $stockNotice = $item['event_type'] === 'low_stock';
+            $other = $stockNotice ? $item['product'] : ($vendorNotice ? $item['buyer'] : $item['vendor']);
+            $target = $stockNotice ? '/vendor#inventory' : ($vendorNotice?'/vendor':'/orders').'#purchase-'.$item['order_id'];
+            $targetLabel = $stockNotice ? 'Open inventory' : 'PO-'.$item['order_id'];
             $date = new DateTimeImmutable($item['created_at']);
         ?>
           <li class="notification-item<?=$item['read_at']===null?' notification-unread':''?>">
@@ -34,12 +42,12 @@ $notificationCopy = [
             <div>
               <p class="notification-title"><?=h($title)?> <span class="notification-new"<?=$item['read_at']!==null?' hidden':''?>>Unread</span></p>
               <p class="muted"><?=h($other)?> <?=h($action)?></p>
-              <a class="back" href="<?=$vendorNotice?'/vendor':'/orders'?>#purchase-<?=h($item['order_id'])?>">PO-<?=h($item['order_id'])?><i data-lucide="arrow-right" aria-hidden="true"></i></a>
+              <a class="back" href="<?=h($target)?>"><?=h($targetLabel)?><i data-lucide="arrow-right" aria-hidden="true"></i></a>
             </div>
             <div class="notification-actions">
               <time datetime="<?=h($date->format(DATE_ATOM))?>"><?=h($date->format('M j, g:i A'))?></time>
               <button type="button" class="notification-delete" data-delete-notification="<?=h($item['id'])?>"
-                aria-label="<?=h('Delete '.$title.' for PO-'.$item['order_id'].' ('.$other.')')?>">
+                aria-label="<?=h('Delete '.$title.' ('.$other.', '.$targetLabel.')')?>">
                 <i data-lucide="trash-2" aria-hidden="true"></i>Delete
               </button>
             </div>
@@ -47,10 +55,13 @@ $notificationCopy = [
         <?php endforeach; ?>
       </ul>
     <?php endif; ?>
+    <?php if ($nextNotification): ?>
+      <a id="olderNotifications" class="secondary mt-3" href="/notifications?before=<?=h($nextNotification)?><?=$unreadOnly?'&amp;unread=1':''?>">Load older</a>
+    <?php endif; ?>
   </section>
 </div>
 
-<?php if ($notifications): ?>
+<?php if ($latestNotification): ?>
   <div class="modal fade" id="deleteNotificationsModal" tabindex="-1" aria-labelledby="deleteNotificationsTitle" aria-describedby="deleteNotificationsMessage">
     <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
       <div class="modal-header"><h2 id="deleteNotificationsTitle">Delete all notifications?</h2></div>

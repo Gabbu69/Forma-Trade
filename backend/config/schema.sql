@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS demo_updates (name VARCHAR(64) PRIMARY KEY) ENGINE=In
 CREATE TABLE IF NOT EXISTS users (
  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  email VARCHAR(160) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL,
+ session_version INT UNSIGNED NOT NULL DEFAULT 1,
  name VARCHAR(100) NOT NULL, role ENUM('buyer','vendor') NOT NULL
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS categories (
@@ -50,11 +51,12 @@ CREATE TABLE IF NOT EXISTS account_photos (
 ) ENGINE=InnoDB;
 CREATE TABLE IF NOT EXISTS account_notifications (
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
- user_id INT UNSIGNED NOT NULL, vendor_order_id INT UNSIGNED NOT NULL,
- event_type ENUM('new_order','processing','fulfilled') NOT NULL,
+ user_id INT UNSIGNED NOT NULL, vendor_order_id INT UNSIGNED NULL, product_id INT UNSIGNED NULL,
+ event_type ENUM('new_order','processing','fulfilled','low_stock') NOT NULL,
  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, read_at DATETIME NULL,
  UNIQUE(user_id,vendor_order_id,event_type), INDEX(user_id,read_at,id),
- FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (vendor_order_id) REFERENCES vendor_orders(id)
+ FOREIGN KEY (user_id) REFERENCES users(id), FOREIGN KEY (vendor_order_id) REFERENCES vendor_orders(id),
+ FOREIGN KEY (product_id) REFERENCES products(id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS account_recovery (

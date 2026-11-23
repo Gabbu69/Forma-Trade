@@ -31,7 +31,13 @@ async function signOut(page) {
 }
 
 async function verifyAccountsAndNotifications(page) {
-  await page.goto(base + "/notifications");
+  for (const view of ["profile", "settings", "notifications"]) {
+    await page.goto(base + "/" + view);
+    for (const width of [375, 768, 1440]) {
+      await page.setViewportSize({ width, height: 920 });
+      await bothThemes(page, width, view);
+    }
+  }
   const notifications = page.locator(".notification-item");
   await notifications.first().waitFor();
   const before = await notifications.count();
@@ -91,7 +97,8 @@ async function verifyAccountsAndNotifications(page) {
   await page.locator("#accountMenu").click();
   assert.equal(await page.locator(".account-menu-name img").getAttribute("src"), source);
   await page.locator(".account-menu").getByRole("link", { name: "Settings" }).click();
-  await page.getByRole("radio", { name: "Dark" }).press("Space");
+  await page.locator(".appearance-option").filter({ hasText: "Dark" }).click();
+  await page.locator('html[data-bs-theme="dark"]').waitFor();
   await page.reload();
   assert.equal(await page.locator("html").getAttribute("data-bs-theme"), "dark");
   await page.locator("#recoveryPassword").fill(password);
@@ -100,18 +107,38 @@ async function verifyAccountsAndNotifications(page) {
   await codeBox.waitFor();
   const code = await codeBox.textContent();
 
-  await signOut(page);
-  await page.getByRole("link", { name: "Forgot password?" }).click();
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Recovery code").fill(code);
-  await page.getByLabel("New password", { exact: true }).fill(replacement);
-  await page.getByLabel("Confirm password").fill(replacement);
-  await page.getByRole("button", { name: "Reset password" }).click();
-  await page.getByText("Password reset. Sign in with your new password.").waitFor();
-  await page.getByLabel("Email address").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(replacement);
-  await page.locator("#loginForm button").click();
-  await page.waitForURL(base + "/vendor");
+  const browser = page.context().browser();
+  const otherContext = await browser.newContext();
+  const resetContext = await browser.newContext();
+  try {
+    const other = await otherContext.newPage();
+    await other.goto(base + "/login");
+    await other.getByLabel("Email address").fill(email);
+    await other.getByLabel("Password", { exact: true }).fill(password);
+    await other.locator("#loginForm button").click();
+    await other.waitForURL(base + "/vendor");
+
+    const reset = await resetContext.newPage();
+    await reset.goto(base + "/login");
+    await reset.getByRole("link", { name: "Forgot password?" }).click();
+    await reset.getByLabel("Email address").fill(email);
+    await reset.getByLabel("Recovery code").fill(code);
+    await reset.getByLabel("New password", { exact: true }).fill(replacement);
+    await reset.getByLabel("Confirm password").fill(replacement);
+    await reset.getByRole("button", { name: "Reset password" }).click();
+    await reset.getByText("Password reset. Sign in with your new password.").waitFor();
+    for (const signedIn of [page, other]) {
+      await signedIn.goto(base + "/settings");
+      await signedIn.waitForURL(base + "/login?next=%2Fsettings");
+    }
+    await reset.getByLabel("Email address").fill(email);
+    await reset.getByLabel("Password", { exact: true }).fill(replacement);
+    await reset.locator("#loginForm button").click();
+    await reset.waitForURL(base + "/vendor");
+  } finally {
+    await otherContext.close();
+    await resetContext.close();
+  }
   console.log("PASS browser notification deletion in both themes, vendor signup, profile photo, settings, password recovery and sign-out");
 }
 
@@ -198,6 +225,20 @@ async function downloadAndCompare(page, period) {
   });
   const page = await context.newPage();
   try {
+    const native = await browser.newContext({ javaScriptEnabled: false });
+    try {
+      const login = await native.newPage();
+      await login.goto(base + "/login");
+      assert.match(await login.locator("noscript").innerText(), /Enable JavaScript to sign in/);
+      await login.getByLabel("Email address").fill("native@example.test");
+      await login.getByLabel("Password", { exact: true }).fill("NativeFormFixture!");
+      const request = login.waitForRequest((r) => r.url() === base + "/api/login");
+      await login.locator("#loginForm button").click();
+      assert.equal((await request).method(), "POST");
+      await login.waitForURL(base + "/api/login");
+    } finally {
+      await native.close();
+    }
     await page.goto(base + "/");
     await page.locator(".product-card").first().waitFor();
     await page
@@ -556,6 +597,14 @@ async function downloadAndCompare(page, period) {
     });
     await completed.locator(".fulfilled").first().waitFor();
     assert.equal(await completed.locator(".fulfilled").count(), 2);
+    await completed.getByRole("link", { name: "Print PO-" + order }).click();
+    await page.getByRole("heading", { name: "Purchase order PO-" + order }).waitFor();
+    assert.equal(await page.locator(".print-lines").count(), 2);
+    await page.emulateMedia({ media: "print" });
+    assert.ok(await page.getByRole("button", { name: "Print purchase order" }).isHidden());
+    await page.emulateMedia({ media: null });
+    await page.getByRole("link", { name: "Back to purchases" }).click();
+    await completed.waitFor();
     await page.getByRole("button", { name: "To Rate", exact: true }).click();
     await completed.locator(".fulfilled").first().waitFor();
     assert.equal(await completed.locator(".order-rating").count(), 2);

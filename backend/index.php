@@ -39,6 +39,7 @@ $unreadNotifications = 0;
 function jsonOut(mixed $data): never { header('Content-Type: application/json; charset=utf-8'); echo json_encode($data,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE); exit; }
 try {
     $db=Database::connect(); $catalog=new Catalog($db); $purchases=new Purchases($db);
+    Access::validateSession($db);
     if (preg_match('#^/media/account/photo/([0-9a-f]{32})$#D', $path, $avatar)) {
         $member = $_SESSION['user'] ?? null;
         if (!$member) { http_response_code(404); exit; }
@@ -118,7 +119,7 @@ try {
                 if ($method === 'DELETE') Notifications::delete($db, $user['id'], $body);
                 jsonOut(['unread'=>Notifications::unread($db, $user['id'])]);
             case '/api/account/password':
-                Account::changePassword($db, $user['id'], $body);
+                $_SESSION['session_version'] = Account::changePassword($db, $user['id'], $body);
                 session_regenerate_id(true);
                 jsonOut(['ok'=>true]);
             case '/api/cart': jsonOut($method==='POST'?$purchases->update($body):$purchases->cart());
@@ -152,7 +153,8 @@ try {
         }
     }
     if ($_SERVER['REQUEST_METHOD']!=='GET') reject(405,'Unsupported request method.');
-    $page=match($path){'/'=>'catalog','/cart'=>'cart','/orders'=>'orders','/vendor'=>'vendor','/login'=>'login','/register'=>'register','/forgot-password'=>'forgot-password','/profile'=>'profile','/settings'=>'settings','/notifications'=>'notifications',default=>reject(404,'Page unavailable.')};
+    $printOrder = preg_match('#^/orders/([1-9][0-9]{0,9})/print$#D', $path, $orderMatch);
+    $page=$printOrder?'print-order':match($path){'/'=>'catalog','/cart'=>'cart','/orders'=>'orders','/vendor'=>'vendor','/login'=>'login','/register'=>'register','/forgot-password'=>'forgot-password','/profile'=>'profile','/settings'=>'settings','/notifications'=>'notifications',default=>reject(404,'Page unavailable.')};
     $user=$_SESSION['user']??null;
     if ($page==='register' && $user) { header('Location: /'); exit; }
     if ($page==='catalog' && ($user['role']??'')==='vendor') { header('Location: /vendor');exit; }
@@ -164,7 +166,22 @@ try {
         $user['name'] = $_SESSION['user']['name'] = $name;
     }
     if ($page==='orders'||($page==='cart'&&$user)) Access::role('buyer');
-    if ($page==='notifications') $notifications = Notifications::recent($db, Access::user());
+    if ($printOrder) {
+        $orderLines = $purchases->history(Access::role('buyer'), (int)$orderMatch[1]);
+        if (!$orderLines) reject(404, 'Purchase order unavailable.');
+    }
+    if ($page==='notifications') {
+        $member = Access::user();
+        $unreadOnly = ($_GET['unread'] ?? null) === '1';
+        $before = isset($_GET['before']) ? integer($_GET['before'],1,PHP_INT_MAX,'notification cursor') : null;
+        $notifications = Notifications::recent($db, $member['id'], $before, $unreadOnly);
+        $nextNotification = null;
+        if (count($notifications) > 50) {
+            array_pop($notifications);
+            $nextNotification = $notifications[49]['id'];
+        }
+        $latestNotification = Notifications::latestID($db, $member['id']);
+    }
     if ($page==='profile') $activity = Account::activity($db, $user);
     if ($user) {
         $photoKey = sql($db, 'SELECT photo_key FROM account_photos WHERE user_id=?', [$user['id']])->fetchColumn();

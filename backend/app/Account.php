@@ -65,21 +65,22 @@ final class Account {
         ];
     }
 
-    public static function changePassword(PDO $db, int $id, array $body): void {
+    public static function changePassword(PDO $db, int $id, array $body): int {
         $current = $body['current_password'] ?? null;
         if (!is_string($current) || $current === '' || strlen($current) > 128 || str_contains($current, "\0")) {
             reject(422, 'Enter your current password.');
         }
         $password = self::newPassword($body);
-        $hash = sql($db, 'SELECT password_hash FROM users WHERE id=?', [$id])->fetchColumn();
-        if (!$hash || !password_verify($current, $hash)) reject(422, 'The current password is incorrect.');
-        if (password_verify($password, $hash)) reject(422, 'Choose a different password.');
+        $account = sql($db, 'SELECT password_hash,session_version FROM users WHERE id=?', [$id])->fetch();
+        if (!$account || !password_verify($current, $account['password_hash'])) reject(422, 'The current password is incorrect.');
+        if (password_verify($password, $account['password_hash'])) reject(422, 'Choose a different password.');
         $updated = sql(
             $db,
-            'UPDATE users SET password_hash=? WHERE id=? AND BINARY password_hash=?',
-            [password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]), $id, $hash],
+            'UPDATE users SET password_hash=?,session_version=session_version+1 WHERE id=? AND session_version=?',
+            [password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]), $id, $account['session_version']],
         );
         if (!$updated->rowCount()) reject(409, 'Your password changed. Enter your current password and try again.');
+        return (int)$account['session_version'] + 1;
     }
 
     public static function issueRecoveryCode(PDO $db, int $id, array $body): string {
@@ -112,7 +113,7 @@ final class Account {
         try {
             $used = sql($db, 'DELETE FROM account_recovery WHERE user_id=? AND code_hash=?', [$id,$digest]);
             if (!$used->rowCount()) reject(422, 'The email or recovery code is incorrect.');
-            sql($db, 'UPDATE users SET password_hash=? WHERE id=?', [$hash,$id]);
+            sql($db, 'UPDATE users SET password_hash=?,session_version=session_version+1 WHERE id=?', [$hash,$id]);
             $db->commit();
         } catch (Throwable $error) {
             $db->rollBack();

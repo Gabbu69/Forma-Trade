@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="csrf-token" content="<?=h($_SESSION['csrf'])?>"><title><?=h(['catalog'=>'Marketplace','cart'=>'Purchase cart','orders'=>'Purchase orders','vendor'=>'Vendor workspace','login'=>'Sign in','register'=>'Create account','forgot-password'=>'Reset password','profile'=>'Profile','settings'=>'Settings','notifications'=>'Notifications','error'=>'Workspace message'][$page])?> · Forma Trade</title>
+<meta name="csrf-token" content="<?=h($_SESSION['csrf'])?>"><title><?=h(['catalog'=>'Marketplace','cart'=>'Purchase cart','orders'=>'Purchase orders','print-order'=>'Print purchase order','vendor'=>'Vendor workspace','login'=>'Sign in','register'=>'Create account','forgot-password'=>'Reset password','profile'=>'Profile','settings'=>'Settings','notifications'=>'Notifications','error'=>'Workspace message'][$page])?> · Forma Trade</title>
 <script src="/static/js/appearance.js"></script>
 <link rel="preload" href="/static/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="/static/img/forma.svg"><link rel="stylesheet" href="/static/vendor/bootstrap.min.css"><link rel="stylesheet" href="/static/css/app.css">

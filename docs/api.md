@@ -9,13 +9,13 @@ Sign-in, registration, password reset, password change, and recovery code genera
 | GET catalog | Public | Optional q, category, vendor, min, max, rating, stock=1, sort=price/high/name. Returns matching products with supplier, category, average rating, pack price and stock. Returns the cover key in `image` and gallery keys in `images` in display order. See photo URLs below. |
 | POST login | Public | email, password. Returns id, name, email, role. |
 | POST register | Guest | name, email, new_password, confirm_password, role (buyer or vendor). Creates an account and signs it in. |
-| POST reset-password | Public | email, code, new_password, confirm_password. Consumes a valid one-time recovery code. |
+| POST reset-password | Public | email, code, new_password, confirm_password. Consumes a valid one-time recovery code and revokes earlier sessions. |
 | POST account/profile | Signed-in session | name. Returns the saved display name. |
-| POST account/password | Signed-in session | current_password, new_password, confirm_password. Changes the password. |
+| POST account/password | Signed-in session | current_password, new_password, confirm_password. Changes the password and revokes other sessions. |
 | POST account/recovery | Signed-in session | current_password. Returns a new one-time code and replaces the previous code. |
 | POST account/photo | Signed-in session | Multipart photo[] with one supported image. Returns an account-private photo URL. |
 | DELETE account/photo | Signed-in session | Empty object. Removes the current profile photo. |
-| GET notifications | Signed-in session | Returns unread count. |
+| GET notifications | Signed-in session | Returns the total unread count. The inbox page at /notifications supports unread=1 and a before cursor. |
 | POST notifications | Signed-in session | through. Marks notifications through that ID as read. Returns unread count. |
 | DELETE notifications | Signed-in session | id or all=true. Removes notifications from the signed-in account and returns unread count. |
 | POST logout | Signed-in session | Empty object. Ends session and returns ok. |

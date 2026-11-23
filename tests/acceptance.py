@@ -17,7 +17,9 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
-PHP = ["php", "-d", "extension=pdo_mysql", "-d", "display_errors=0"]
+PHP = ["php", "-d", "display_errors=0"]
+if subprocess.run([*PHP, "-r", "exit(extension_loaded('pdo_mysql') ? 0 : 1);"]).returncode:
+    PHP.extend(["-d", "extension=pdo_mysql"])
 class Client:
     def __init__(self, url):
         self.url = url
@@ -141,11 +143,12 @@ def scenarios(urls):
         vendor.api("vendor/sales/export?period=bad",status=422)
     print("PASS vendor-scoped daily and monthly CSVs match all chart buckets")
     print("PASS multi-vendor purchase, replay, independent fulfillment, buyer history and daily/monthly sales")
-    new={**product,"name":"Acceptance sample","stock":1,"price":"17.25"}
+    new={**product,"name":"Acceptance sample","stock":1,"low_threshold":0,"price":"17.25"}
     del new["id"]
     sample=form.api("vendor/products",new)["id"]
     rival=Client(urls[1]).login("bay")
     keys=[c.api("cart",{"id":sample,"quantity":1})["key"] for c in [buyer,rival]]
+    unread_before_stock = form.api("notifications")["unread"]
     gate=threading.Barrier(2)
     def compete(pair):
         c,key=pair
@@ -162,17 +165,41 @@ def scenarios(urls):
     assert loser.api("cart")["items"][0]["quantity"]==1
     loser.api("cart",{"id":sample,"quantity":0})
     assert next(p for p in form.api("vendor/products") if p["id"]==sample)["stock"]==0
+    assert form.api("notifications")["unread"] == unread_before_stock + 2
+    inbox = form.opener.open(form.url + "/notifications").read().decode()
+    assert "Low stock" in inbox and "/vendor#inventory" in inbox
+    sample_row = next(p for p in form.api("vendor/products") if p["id"] == sample)
+    form.api("vendor/products", sample_row)
+    assert form.api("notifications")["unread"] == unread_before_stock + 2
+    print("PASS low-stock threshold crossing and no duplicate alert")
     print("PASS concurrent last-pack checkout on two server processes, retained editable losing cart")
     cart=buyer.api("cart",{"id":1,"quantity":1})
     p=form.api("vendor/products")[0]
     form.api("vendor/products",{**p,"price":"9000.25"})
     form.api("vendor/products",p,status=409)
+    lamp = next(item for item in field.api("vendor/products") if item["id"] == 2)
+    cart = buyer.api("cart", {"id": 2, "quantity": 1})
+    field.api("vendor/products", {**lamp, "stock": 0})
+    buyer.api("checkout", {"key": cart["key"]}, status=409)
+    assert buyer.api("cart") == {**cart, "items": [{**item, "stock": 0} if item["id"] == 2 else item for item in cart["items"]]}
+    lamp = next(item for item in field.api("vendor/products") if item["id"] == 2)
+    field.api("vendor/products", {**lamp, "stock": 17})
+    cart = buyer.api("cart", {"id": 2, "quantity": 0})
     buyer.api("checkout",{"key":cart["key"]},status=409)
     updated=buyer.api("cart")
     assert updated["items"][0]["price"]=="9000.25" and updated["key"]!=cart["key"]
     buyer.api("checkout",{"key":updated["key"]})
     assert next(r for r in buyer.api("orders") if r["order_id"]==order and r["title"]==p["name"])["unit_price"]=="8900.00"
-    print("PASS price review, inventory version conflicts, immutable purchase prices")
+    printed = buyer.opener.open(urls[0] + f"/orders/{order}/print").read().decode()
+    assert f"Purchase order PO-{order}" in printed and "8,900.00" in printed and "13,500.00" in printed
+    try:
+        rival.opener.open(urls[1] + f"/orders/{order}/print")
+    except urllib.error.HTTPError as response:
+        assert response.code == 404
+        response.close()
+    else:
+        raise AssertionError("Another buyer can view this purchase order")
+    print("PASS atomic quote review, version conflicts, private printing and historical prices")
 
 def port():
     with socket.socket() as s:
@@ -308,7 +335,10 @@ def account_scenarios(url):
     vendor.api("account/password", {**change, "new_password": "short"}, status=422)
     vendor.api("account/password", {**change, "confirm_password": "different"}, status=422)
     vendor.api("account/password", {**change, "current_password": "incorrect"}, status=422)
+    other_vendor_session = Client(url).login("form")
     assert vendor.api("account/password", change) == {"ok": True}
+    other_vendor_session.api("vendor/orders", status=401)
+    assert vendor.api("vendor/orders") is not None
     assert vendor.opener.open(url + "/settings").geturl() == url + "/settings"
     guest.api("login", {"email": "form@forma.test", "password": old_password}, status=401)
     result = guest.api("login", {"email": "form@forma.test", "password": new_password})
@@ -322,7 +352,10 @@ def account_scenarios(url):
              "confirm_password": new_password}
     outsider.api("reset-password", reset, csrf=False, status=403)
     outsider.api("reset-password", {**reset, "email": "bay@forma.test"}, status=422)
+    other_buyer_session = Client(url).login("north")
     assert outsider.api("reset-password", reset) == {"ok": True}
+    buyer.api("orders", status=401)
+    other_buyer_session.api("orders", status=401)
     outsider.api("reset-password", reset, status=422)
     outsider.api("login", {"email": reset["email"], "password": old_password}, status=401)
     assert outsider.api("login", {"email": reset["email"], "password": new_password})["role"] == "buyer"
@@ -351,6 +384,28 @@ def registration_scenarios(url):
     guest.api("register", details, status=409)
     assert guest.api("login", {"email": details["email"], "password": password})["role"] == "vendor"
     print("PASS buyer and vendor registration, role validation, duplicate email and workspace access")
+
+
+def notification_history_scenario(url, env):
+    fixture = """
+require 'backend/config/bootstrap.php';
+$db = Database::connect();
+sql($db, 'UPDATE account_notifications SET read_at=NOW() WHERE user_id=4');
+for ($i = 0; $i < 53; ++$i) {
+    sql($db, "INSERT INTO account_notifications(user_id,product_id,event_type) VALUES(4,2,'low_stock')");
+}
+"""
+    subprocess.run([*PHP, "-r", fixture], cwd=ROOT, env=env, check=True)
+    vendor = Client(url).login("field")
+    assert vendor.api("notifications")["unread"] == 53
+    def items(page):
+        return set(re.findall(r'data-delete-notification="(\d+)"', page))
+    first = vendor.opener.open(url + "/notifications?unread=1").read().decode()
+    older = re.search(r'id="olderNotifications"[^>]+href="([^"]+)"', first)[1].replace("&amp;", "&")
+    second = vendor.opener.open(url + older).read().decode()
+    assert len(items(first)) == 50 and len(items(second)) == 3 and items(first).isdisjoint(items(second))
+    assert "&unread=1" in older and "Low stock" in second
+    print("PASS unread inbox pagination, alert links and badge count")
 
 
 def security_scenarios(urls, env):
@@ -425,6 +480,7 @@ def main():
             deletion_scenarios(urls[0])
             account_scenarios(urls[0])
             registration_scenarios(urls[0])
+            notification_history_scenario(urls[0], env)
             security_scenarios(urls, env)
     finally:
         for server in servers:

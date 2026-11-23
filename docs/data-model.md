@@ -16,13 +16,14 @@ erDiagram
     USERS ||--o| ACCOUNT_PHOTOS : owns
     USERS ||--o| ACCOUNT_RECOVERY : recovers
     USERS ||--o{ ACCOUNT_NOTIFICATIONS : receives
-    VENDOR_ORDERS ||--o{ ACCOUNT_NOTIFICATIONS : triggers
+    PRODUCTS o|--o{ ACCOUNT_NOTIFICATIONS : triggers
+    VENDOR_ORDERS o|--o{ ACCOUNT_NOTIFICATIONS : triggers
     USERS o|--o{ SECURITY_AUDIT : acts
 ```
 
 | Table | Key | Responsibility |
 | --- | --- | --- |
-| users | id, unique email | Buyer or supplier identity, role, bcrypt hash |
+| users | id, unique email | Buyer or supplier identity, role, bcrypt hash, session version |
 | categories | id, unique name | Reusable product categories |
 | products | id | Supplier, category, pack terms, price, stock, alert threshold, edit version |
 | product_photos | photo_key, unique product_id + position | Gallery order and WebP image data |
@@ -33,7 +34,7 @@ erDiagram
 | order_lines | id, unique vendor_order_id + product_id | Ordered packs and purchase-time terms |
 | account_photos | user_id, unique photo_key | Private profile image keyed by account |
 | account_recovery | user_id | Digest of the current one-time recovery code |
-| account_notifications | id, unique user_id + vendor_order_id + event_type | Order events with account-specific read state |
+| account_notifications | id, unique user_id + vendor_order_id + event_type | Order or product stock events with account-specific read state |
 | api_rate_windows | action + subject + window_start | Shared request counts and expiration |
 | security_audit | id, unique request_id | Audited action, HTTP outcome, timestamp, client address, and account when known |
 
