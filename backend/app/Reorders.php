@@ -15,6 +15,7 @@ final class Reorders {
             JOIN users u ON u.id = v.vendor_id
             JOIN order_lines l ON l.vendor_order_id = v.id
             LEFT JOIN products p ON p.id = l.product_id AND p.vendor_id = v.vendor_id
+              AND NOT EXISTS (SELECT 1 FROM retired_products r WHERE r.product_id = p.id)
             WHERE o.id = ? AND o.buyer_id = ?
             ORDER BY v.id, l.id', [$order, $buyer])->fetchAll();
         if (!$rows) reject(404, 'This purchase order is unavailable.');

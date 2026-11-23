@@ -8,6 +8,15 @@ if (!base || !/^http:\/\/127\.0\.0\.1:\d+$/.test(base))
   throw new Error("Run via the isolated acceptance suite.");
 const out = path.resolve(".runtime/qa");
 fs.mkdirSync(out, { recursive: true });
+// Poll from Node so Chromium can keep the application's CSP intact.
+async function waitForPage(page, condition, arg) {
+  const deadline = Date.now() + 15000;
+  do {
+    if (await page.evaluate(condition, arg)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } while (Date.now() < deadline);
+  throw new Error("Page condition did not become true: " + condition);
+}
 async function signIn(page, account) {
   await page.goto(base + "/login");
   await page.locator("summary").click();
@@ -15,6 +24,97 @@ async function signIn(page, account) {
   await page.locator("#loginForm button").click();
   await page.waitForURL(account === "north" ? base + "/" : base + "/vendor");
 }
+async function signOut(page) {
+  await page.locator("#accountMenu").click();
+  await page.locator("#logout").click();
+  await page.waitForURL(base + "/login");
+}
+
+async function verifyAccountsAndNotifications(page) {
+  await page.goto(base + "/notifications");
+  const notifications = page.locator(".notification-item");
+  await notifications.first().waitFor();
+  const before = await notifications.count();
+  assert.ok(before > 1);
+  await notifications.first().getByRole("button", { name: /^Delete / }).click();
+  await page.getByText("Notification deleted.", { exact: true }).waitFor();
+  assert.equal(await notifications.count(), before - 1);
+
+  const dialog = page.getByRole("dialog", { name: "Delete all notifications?" });
+  const clearInbox = page.locator("#deleteAllNotifications");
+  const modalColor = () => dialog.locator(".modal-content").evaluate((el) => getComputedStyle(el).backgroundColor);
+  await setTheme(page, "dark");
+  await clearInbox.click();
+  await dialog.waitFor();
+  const darkColor = await modalColor();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await dialog.waitFor({ state: "hidden" });
+  assert.equal(await notifications.count(), before - 1);
+  await setTheme(page, "light");
+  await clearInbox.click();
+  await dialog.waitFor();
+  assert.notEqual(await modalColor(), darkColor);
+  await dialog.getByRole("button", { name: "Delete all" }).click();
+  await page.getByText("Order updates will appear here.").waitFor();
+  await page.reload();
+  assert.equal(await notifications.count(), 0);
+  assert.equal(await page.locator("#notificationCount").isHidden(), true);
+
+  await signOut(page);
+  await page.getByRole("link", { name: "Create account" }).click();
+  const register = page.locator("#registerForm");
+  await register.getByRole("radio", { name: "Buyer" }).press("ArrowRight");
+  assert.ok(await register.getByRole("radio", { name: "Vendor" }).isChecked());
+  const email = "browser-supplier@example.test";
+  const password = "SupplierDemo-2468!";
+  const replacement = "SupplierDemo-9753!";
+  await register.getByLabel("Display name").fill("Browser Supplier");
+  await register.getByLabel("Email address").fill(email);
+  await register.getByLabel("New password", { exact: true }).fill(password);
+  await register.getByLabel("Confirm password").fill(password);
+  await register.getByRole("button", { name: "Create account" }).click();
+  await page.waitForURL(base + "/vendor");
+
+  await page.goto(base + "/profile");
+  await page.getByLabel("Display name").fill("Test Supplier");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await page.getByText("Profile saved.", { exact: true }).waitFor();
+  await page.getByLabel("Choose a photo").setInputFiles(path.resolve("static/img/keyboard.webp"));
+  await page.getByRole("button", { name: "Save photo" }).click();
+  await page.getByText("Profile photo saved.", { exact: true }).waitFor();
+  const avatar = page.locator("#accountMenu img");
+  const source = await avatar.getAttribute("src");
+  await page.reload();
+  await avatar.evaluate((img) => img.decode());
+  assert.equal(await avatar.getAttribute("src"), source);
+  assert.equal(await page.getByLabel("Display name").inputValue(), "Test Supplier");
+  await page.locator("#accountMenu").click();
+  assert.equal(await page.locator(".account-menu-name img").getAttribute("src"), source);
+  await page.locator(".account-menu").getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("radio", { name: "Dark" }).press("Space");
+  await page.reload();
+  assert.equal(await page.locator("html").getAttribute("data-bs-theme"), "dark");
+  await page.locator("#recoveryPassword").fill(password);
+  await page.getByRole("button", { name: "Generate recovery code" }).click();
+  const codeBox = page.locator("#recoveryResult code");
+  await codeBox.waitFor();
+  const code = await codeBox.textContent();
+
+  await signOut(page);
+  await page.getByRole("link", { name: "Forgot password?" }).click();
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Recovery code").fill(code);
+  await page.getByLabel("New password", { exact: true }).fill(replacement);
+  await page.getByLabel("Confirm password").fill(replacement);
+  await page.getByRole("button", { name: "Reset password" }).click();
+  await page.getByText("Password reset. Sign in with your new password.").waitFor();
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(replacement);
+  await page.locator("#loginForm button").click();
+  await page.waitForURL(base + "/vendor");
+  console.log("PASS browser notification deletion in both themes, vendor signup, profile photo, settings, password recovery and sign-out");
+}
+
 async function layout(page, width, label) {
   await page.evaluate(
     () =>
@@ -34,9 +134,13 @@ async function layout(page, width, label) {
     path: path.join(out, label + "-" + width + "-" + theme + ".png"),
   });
 }
+async function setTheme(page, theme) {
+  if (await page.locator("html").getAttribute("data-bs-theme") !== theme)
+    await page.locator("#appearance").click();
+}
 async function bothThemes(page, width, label) {
   for (const choice of ["dark", "light"]) {
-    await page.locator("#appearance").selectOption(choice);
+    await setTheme(page, choice);
     assert.equal(
       await page.locator("html").getAttribute("data-bs-theme"),
       choice,
@@ -47,7 +151,8 @@ async function bothThemes(page, width, label) {
 async function downloadAndCompare(page, period) {
   await page.locator("#period").selectOption(period);
   const size = period === "day" ? 7 : 6;
-  await page.waitForFunction(
+  await waitForPage(
+    page,
     (n) => document.querySelectorAll("#salesFigures>div").length === n,
     size,
   );
@@ -97,11 +202,31 @@ async function downloadAndCompare(page, period) {
     await page.locator(".product-card").first().waitFor();
     await page
       .locator(".product-photo img")
-      .evaluateAll((imgs) => Promise.all(imgs.map((img) => img.decode())));
+      .evaluateAll((imgs) => Promise.all(imgs.map((img) => {
+        img.loading = "eager";
+        return img.decode();
+      })));
     await page.evaluate(() => document.fonts.ready);
     assert.ok(await page.evaluate(() => document.fonts.check("16px Inter")));
     await page.keyboard.press("Tab");
     assert.equal(await page.locator(":focus").innerText(), "Skip to content");
+    const riser = page.getByRole("button", { name: "Preview Bridge Monitor Riser" });
+    await riser.click();
+    await page.getByRole("button", { name: "Previous photo" }).click();
+    await page.getByRole("button", { name: "Previous photo" }).press("ArrowRight");
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /riser\.webp$/);
+    await page.getByRole("button", { name: "Next photo" }).click();
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /riser-detail\.webp$/);
+    await page.getByRole("button", { name: "Bridge Monitor Riser · In use" }).click();
+    await page.locator("#previewPhoto").evaluate((img) => img.decode());
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /riser-workspace\.webp$/);
+    await page.keyboard.press("Escape");
+    await page.locator("#packPreview").waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "Preview Flute Ceramic Pen Cup" }).click();
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /pen-cup\.webp$/);
+    await waitForPage(page, () => document.querySelector("#packPreview").contains(document.activeElement));
+    await page.keyboard.press("Escape");
+    await page.locator("#packPreview").waitFor({ state: "hidden" });
     await page.getByRole("heading", { name: "Product catalog" }).click();
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 920 });
@@ -111,28 +236,32 @@ async function downloadAndCompare(page, period) {
         await page.locator("#filters.show").waitFor();
         await page.getByText("Lighting", { exact: true }).first().click();
         await page.getByRole("button", { name: "Show products" }).click();
-        await page.waitForFunction(
-          () => document.querySelectorAll(".product-card").length === 1,
+        await waitForPage(
+          page,
+          () => document.querySelectorAll(".product-card").length === 5,
         );
         await page.locator(".mobile-filter").click();
         await page.locator("#reset").click();
         await page.getByRole("button", { name: "Show products" }).click();
-        await page.waitForFunction(
+        await waitForPage(
+          page,
           () => document.querySelectorAll(".product-card").length > 1,
         );
       }
     }
     await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
-    await page.locator("#appearance").selectOption("system");
+    await page.evaluate(() => localStorage.removeItem("forma.appearance"));
+    await page.reload();
     assert.equal(
       await page.locator("html").getAttribute("data-bs-theme"),
       "dark",
     );
     await page.emulateMedia({ colorScheme: "light" });
-    await page.waitForFunction(
+    await waitForPage(
+      page,
       () => document.documentElement.dataset.bsTheme === "light",
     );
-    await page.locator("#appearance").selectOption("dark");
+    await setTheme(page, "dark");
     await page.reload();
     assert.equal(
       await page.locator("html").getAttribute("data-bs-theme"),
@@ -141,7 +270,8 @@ async function downloadAndCompare(page, period) {
     await page
       .locator("select[name=vendor]")
       .selectOption({ label: "Field Objects" });
-    await page.waitForFunction(
+    await waitForPage(
+      page,
       () =>
         [...document.querySelectorAll(".supplier")]
           .filter((e) => e.closest(".product-card"))
@@ -152,8 +282,10 @@ async function downloadAndCompare(page, period) {
     await page.locator("input[name=max]").fill("5000");
     await page.locator("select[name=rating]").selectOption("4.5");
     await page.locator("input[name=stock]").check();
-    await page.locator("#sort").selectOption("price");
-    await page.waitForFunction(
+    await page.locator("#sort").click();
+    await page.getByRole("button", { name: "Price: low to high", exact: true }).click();
+    await waitForPage(
+      page,
       () =>
         document.querySelectorAll(".product-card").length === 1 &&
         document.querySelector(".product-title").textContent ===
@@ -161,7 +293,8 @@ async function downloadAndCompare(page, period) {
     );
     await page.locator("#reset").click();
     await page.getByRole("searchbox").fill("Keyboard");
-    await page.waitForFunction(
+    await waitForPage(
+      page,
       () =>
         document.querySelectorAll(".product-card").length === 1 &&
         document.querySelector(".product-title")?.textContent ===
@@ -177,7 +310,8 @@ async function downloadAndCompare(page, period) {
         name: "Add one pack of Studio Mechanical Keyboard",
       })
       .dblclick();
-    await page.waitForFunction(
+    await waitForPage(
+      page,
       () => document.querySelector("#cartCount").textContent === "2",
     );
     await page.locator("#notice .notice-close").click();
@@ -187,6 +321,11 @@ async function downloadAndCompare(page, period) {
     await preview.focus();
     await page.keyboard.press("Enter");
     await page.getByRole("dialog").waitFor();
+    const detail = page.getByRole("button", { name: "Arc Task Lamp · Detail" });
+    await detail.focus();
+    await page.keyboard.press("Enter");
+    assert.equal(await detail.getAttribute("aria-pressed"), "true");
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /lamp-detail\.webp$/);
     await page.keyboard.press("Escape");
     await page.locator("#packPreview").waitFor({ state: "hidden" });
     assert.equal(
@@ -196,6 +335,7 @@ async function downloadAndCompare(page, period) {
     await page
       .getByRole("button", { name: "Arc Task Lamp", exact: true })
       .click();
+    assert.match(await page.locator("#previewPhoto").getAttribute("src"), /lamp\.webp$/);
     await page.locator("#previewQty").fill("2");
     assert.equal(await page.locator("#previewUnits").innerText(), "4 units");
     assert.equal(await page.locator("#previewTotal").innerText(), "₱9,200");
@@ -217,7 +357,8 @@ async function downloadAndCompare(page, period) {
     await page.getByText("Stock changed. Review the pack count.").waitFor();
     assert.equal(await page.locator("#previewQty").inputValue(), "2");
     await page.locator("#previewAdd").click();
-    await page.waitForFunction(
+    await waitForPage(
+      page,
       () => document.querySelector("#cartCount").textContent === "4",
     );
     assert.equal(
@@ -229,13 +370,15 @@ async function downloadAndCompare(page, period) {
     await page
       .getByRole("button", { name: "Increase Studio Mechanical Keyboard" })
       .click();
-    await page.waitForFunction(
+    await waitForPage(
+      page,
       () => document.getElementById("cartCount").textContent === "5",
     );
     await page
       .getByRole("button", { name: "Decrease Studio Mechanical Keyboard" })
       .click();
-    await page.waitForFunction(
+    await waitForPage(
+      page,
       () => document.getElementById("cartCount").textContent === "4",
     );
     for (const width of [375, 768, 1440]) {
@@ -245,7 +388,8 @@ async function downloadAndCompare(page, period) {
     await page
       .getByRole("button", { name: "Remove Studio Mechanical Keyboard" })
       .click();
-    await page.waitForFunction(
+    await waitForPage(
+      page,
       () => document.getElementById("cartCount").textContent === "2",
     );
     await page.locator("a.back").click();
@@ -260,7 +404,8 @@ async function downloadAndCompare(page, period) {
         name: "Add one pack of Studio Mechanical Keyboard",
       })
       .click();
-    await page.waitForFunction(
+    await waitForPage(
+      page,
       () => document.getElementById("cartCount").textContent === "3",
     );
     await page.locator(".cart-link").click();
@@ -285,8 +430,9 @@ async function downloadAndCompare(page, period) {
     const order = new URL(page.url()).searchParams.get("placed");
     assert.ok(order);
     for (const account of ["form", "field"]) {
+      await page.locator("#accountMenu").click();
       await page.locator("#logout").click();
-      await page.waitForURL(base + "/");
+      await page.waitForURL(base + "/login");
       await signIn(page, account);
       await page.getByText("View sales figures").click();
       await page.locator("#salesFigures div").first().waitFor();
@@ -305,10 +451,20 @@ async function downloadAndCompare(page, period) {
       await page.getByRole("button", { name: "Show all products" }).click();
       await page.getByRole("button", { name: "Overview", exact: true }).click();
       await page
-        .getByRole("button", { name: /Orders awaiting fulfillment/ })
+        .getByRole("button", { name: /Open orders/ })
         .click();
       assert.equal(await page.locator("#ordersView .fulfilled").count(), 0);
       await page.getByRole("button", { name: "Show all orders" }).click();
+      const orderFilters = page.locator("#vendorOrderFilters");
+      await orderFilters.getByLabel("PO number").fill("PO-" + order);
+      await orderFilters.getByLabel("Buyer").fill("north");
+      await orderFilters.getByLabel("Status").selectOption("received");
+      assert.equal(await page.locator("#ordersView .order-card").count(), 1);
+      assert.equal(await page.locator("#ordersView .order-card h3").textContent(), "PO-" + order);
+      await orderFilters.getByLabel("Buyer").fill("No buyer by this name");
+      await page.getByText("No matching orders", { exact: true }).waitFor();
+      await orderFilters.getByRole("button", { name: "Clear filters" }).click();
+      assert.equal(await orderFilters.getByLabel("Buyer").inputValue(), "");
       await page.locator("[data-tab=inventory]").click();
       await page.getByRole("button", { name: "Add product" }).click();
       await page.getByRole("dialog").waitFor();
@@ -316,12 +472,20 @@ async function downloadAndCompare(page, period) {
         .locator("#productForm input[name=name]")
         .fill("Demo organizer");
       await page.locator("#productForm input[name=price]").fill("450.50");
+      await page.locator("#productForm input[type=file]").setInputFiles([
+        path.resolve("static/img/organizer.webp"),
+        path.resolve("static/img/organizer-detail.webp"),
+      ]);
       await page.getByRole("button", { name: "Save product" }).click();
       await page
         .locator(".inv-item")
         .filter({ hasText: "Demo organizer" })
         .waitFor();
+      await page.locator(".inv-item").filter({ hasText: "Demo organizer" }).locator("img")
+        .evaluate((img) => img.decode());
       await page.getByRole("button", { name: "Edit Demo organizer" }).click();
+      assert.equal(await page.locator("#currentProductPhotos img").count(), 2);
+      assert.match(await page.locator("#currentProductPhotos img").first().getAttribute("src"), /^\/media\/products\/[a-f0-9]{32}$/);
       await page
         .locator("#productForm input[name=name]")
         .fill("Studio organizer");
@@ -359,22 +523,31 @@ async function downloadAndCompare(page, period) {
       await page
         .getByRole("button", { name: "Edit Studio organizer" })
         .waitFor();
+      await page.getByRole("button", { name: "Delete Studio organizer" }).click();
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.locator("#deleteProductModal").waitFor({ state: "hidden" });
+      await page.getByRole("button", { name: "Delete Studio organizer" }).click();
+      await page.getByRole("button", { name: "Delete product", exact: true }).click();
+      await page.getByRole("button", { name: "Edit Studio organizer" }).waitFor({ state: "hidden" });
+      await page.locator("#deleteProductModal").waitFor({ state: "hidden" });
       await page.locator("[data-tab=fulfillment]").click();
       const card = page.locator(".order-card").filter({
         has: page.getByRole("heading", { name: "PO-" + order, exact: true }),
       });
-      await card.getByRole("button", { name: "Start processing" }).click();
-      await card.getByRole("button", { name: "Mark fulfilled" }).click();
+      await card.getByRole("button", { name: "Mark in transit" }).click();
+      await card.getByRole("button", { name: "Mark complete" }).click();
       await card.locator(".status.fulfilled").waitFor();
       await page.locator("[data-tab=overview]").click();
       await downloadAndCompare(page, "day");
       await downloadAndCompare(page, "month");
-      await page.waitForFunction(
+      await waitForPage(
+        page,
         () => document.querySelectorAll("#salesFigures>div").length === 6,
       );
     }
+    await page.locator("#accountMenu").click();
     await page.locator("#logout").click();
-    await page.waitForURL(base + "/");
+    await page.waitForURL(base + "/login");
     await signIn(page, "north");
     await page.goto(base + "/orders");
     await page.reload();
@@ -383,6 +556,22 @@ async function downloadAndCompare(page, period) {
     });
     await completed.locator(".fulfilled").first().waitFor();
     assert.equal(await completed.locator(".fulfilled").count(), 2);
+    await page.getByRole("button", { name: "To Rate", exact: true }).click();
+    await completed.locator(".fulfilled").first().waitFor();
+    assert.equal(await completed.locator(".order-rating").count(), 2);
+    assert.equal(await page.locator("#ordersView .status:not(.fulfilled)").count(), 0);
+    const rating = completed.locator(".order-rating").first();
+    const stars = rating.getByRole("radio", { name: "4 stars", exact: true });
+    await stars.press("Space");
+    const ratingResponse = page.waitForResponse(
+      (response) => response.url() === base + "/api/orders/rating" && response.ok(),
+    );
+    await rating.getByRole("button", { name: "Update rating" }).click();
+    assert.deepEqual(await (await ratingResponse).json(), { stars: 4 });
+    await page.getByText("Rating saved.", { exact: true }).waitFor();
+    assert.equal(await stars.isChecked(), true);
+    await page.getByRole("button", { name: "History", exact: true }).click();
+    assert.equal(await stars.isChecked(), true);
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 920 });
       await bothThemes(page, width, "history");
@@ -400,7 +589,7 @@ async function downloadAndCompare(page, period) {
     for (const width of [375, 768, 1440]) {
       await page.setViewportSize({ width, height: 920 });
       for (const theme of ["light", "dark"]) {
-        await page.locator("#appearance").selectOption(theme);
+        await setTheme(page, theme);
         await buyAgain.focus();
         await page.keyboard.press("Enter");
         await review.locator(".repeat-line").first().waitFor();
@@ -480,8 +669,9 @@ async function downloadAndCompare(page, period) {
     assert.ok(repeated && repeated !== "1001");
     assert.equal(await repeatCard.locator(".fulfilled").count(), 2);
     for (const vendor of ["form", "field"]) {
+      await page.locator("#accountMenu").click();
       await page.locator("#logout").click();
-      await page.waitForURL(base + "/");
+      await page.waitForURL(base + "/login");
       await signIn(page, vendor);
       await page.locator("[data-tab=fulfillment]").click();
       const portion = page
@@ -499,7 +689,7 @@ async function downloadAndCompare(page, period) {
           .locator(".status")
           .innerText()
           .then((t) => t.toLowerCase()),
-        "received",
+        "order placed",
       );
       assert.equal(
         await page.getByRole("button", { name: /Buy Again/ }).count(),
@@ -509,6 +699,7 @@ async function downloadAndCompare(page, period) {
     console.log(
       "PASS browser Buy Again, cancellation and focus, both themes at three widths, stock conflict, interrupted confirmation and two-vendor checkout",
     );
+    await verifyAccountsAndNotifications(page);
     assert.deepEqual(remote, []);
     assert.deepEqual(errors, []);
     console.log(

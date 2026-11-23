@@ -28,16 +28,17 @@ class Client:
         html = self.opener.open(self.url + "/login").read().decode()
         self.token = re.search(r'name="csrf-token" content="([^"]+)', html)[1]
 
-    def api(self, path, data=None, status=200, csrf=True):
+    def api(self, path, data=None, status=200, csrf=True, method=None):
         headers = {"Content-Type": "application/json"}
         if csrf:
             headers["X-CSRF-Token"] = self.token
-        request = urllib.request.Request(self.url+"/api/"+path, data=None if data is None else json.dumps(data).encode(), headers=headers)
+        request = urllib.request.Request(self.url+"/api/"+path, data=None if data is None else json.dumps(data).encode(), headers=headers, method=method)
         try:
             response = self.opener.open(request)
         except urllib.error.HTTPError as error:
             response = error
         with response:
+            self.last_headers = response.headers
             result = json.load(response)
             assert response.status == status, (path, response.status, status, result)
             return result
@@ -52,9 +53,22 @@ def revenue(client, period="day"):
 
 def scenarios(urls):
     guest = Client(urls[0])
+    catalog = guest.api("catalog")
+    assert len(catalog) == 18
+    images = [key for product in catalog for key in product["images"]]
+    assert len(set(images)) == len(images) == 54
+    for product in catalog:
+        assert len(product["images"]) == 3 and product["images"][0] == product["image"]
+    for key in images:
+        with guest.opener.open(urls[0]+"/static/img/"+key+".webp") as response:
+            assert response.headers.get_content_type() == "image/webp"
+            assert response.read(12)[8:] == b"WEBP"
+    print("PASS repeatable 18-product setup and 54 local gallery photos")
     assert guest.opener.open(urls[0]+"/orders").geturl().startswith(urls[0]+"/login")
     guest.api("orders",status=401)
     guest.api("vendor/sales/export",status=401)
+    guest.api("notifications",status=401)
+    guest.api("account/photo",{},status=401,method="DELETE")
     guest.api("cart",{"id":1,"quantity":1},status=403,csrf=False)
     buyer = guest.login("north")
     buyer.api("vendor/products",status=403)
@@ -70,10 +84,14 @@ def scenarios(urls):
     assert len(buyer.api("catalog?category=2&min=4000&max=5000&rating=5"))==1
     print("PASS role access, CSRF, ownership, validation, catalog filters")
     baseline=[[revenue(v),revenue(v,"month")] for v in vendors]
+    buyer_unread = buyer.api("notifications")["unread"]
+    vendor_unread = [v.api("notifications")["unread"] for v in vendors]
+    assert buyer_unread > 0 and all(vendor_unread)
     buyer.api("cart",{"id":1,"quantity":1})
     cart=buyer.api("cart",{"id":2,"quantity":1})
     order=buyer.api("checkout",{"key":cart["key"]})["order_id"]
     assert buyer.api("checkout",{"key":cart["key"]})["order_id"]==order
+    assert [v.api("notifications")["unread"] for v in vendors] == [n + 1 for n in vendor_unread]
     groups=[r for r in buyer.api("orders") if r["order_id"]==order]
     assert len(groups)==2 and sum(float(r["unit_price"])*r["quantity"] for r in groups)==13500
     assert not buyer.api("cart")["items"]
@@ -89,6 +107,30 @@ def scenarios(urls):
         assert revenue(v)==baseline[i][0]+float(own[0]["unit_price"])
         assert revenue(v,"month")==baseline[i][1]+float(own[0]["unit_price"])
     assert all(r["status"]=="fulfilled" for r in buyer.api("orders") if r["order_id"]==order)
+    assert buyer.api("notifications")["unread"] == buyer_unread + 4
+    inbox = buyer.opener.open(urls[0] + "/notifications").read().decode()
+    assert "Order in transit" in inbox and "Order completed" in inbox and f"#purchase-{order}" in inbox
+    read = {"through": int(re.search(r'data-through="(\d+)"', inbox)[1])}
+    remove = {"id": read["through"]}
+    buyer.api("notifications", remove, method="DELETE", csrf=False, status=403)
+    assert form.api("notifications", remove, method="DELETE") == {"unread": vendor_unread[0] + 1}
+    assert buyer.api("notifications") == {"unread": buyer_unread + 4}
+    assert buyer.api("notifications", remove, method="DELETE") == {"unread": buyer_unread + 3}
+    assert buyer.api("notifications", remove, method="DELETE") == {"unread": buyer_unread + 3}
+    inbox = buyer.opener.open(urls[0] + "/notifications").read().decode()
+    assert f'data-delete-notification="{remove["id"]}"' not in inbox
+    assert sum(row["order_id"] == order for row in buyer.api("orders")) == 2
+    print("PASS notification deletion, account ownership, retry, and purchase history")
+    buyer.api("notifications",read,status=403,csrf=False)
+    assert buyer.api("notifications",read) == {"unread": 0}
+    assert buyer.api("notifications") == {"unread": 0}
+    assert [v.api("notifications")["unread"] for v in vendors] == [n + 1 for n in vendor_unread]
+    form.api("notifications", {"all": True}, method="DELETE", csrf=False, status=403)
+    assert form.api("notifications", {"all": True}, method="DELETE") == {"unread": 0}
+    assert not re.search(r'data-delete-notification=', form.opener.open(urls[0] + "/notifications").read().decode())
+    assert field.api("notifications")["unread"] == vendor_unread[1] + 1
+    print("PASS bulk deletion, CSRF, and account isolation")
+    print("PASS notification backfill, checkout replay, buyer fulfillment events, access, and persistent read state")
     for vendor in vendors:
         for period in ["day", "month"]:
             with vendor.opener.open(vendor.url+"/api/vendor/sales/export?period="+period) as response:
@@ -200,7 +242,158 @@ def reorder_scenarios(urls):
         edit(vendor,p["id"],price=p["price"],stock=p["stock"],pack_size=p["pack_size"])
     print("PASS Buy Again ownership, CSRF, caps, sold-out items, live conflicts, atomic merge, new quotes, skips and safe replay")
 
+def rating_scenarios(url):
+    buyer = Client(url).login("north")
+    other = Client(url).login("bay")
+    vendor = Client(url).login("form")
+    rows = buyer.api("orders")
+    line = next(row for row in rows if row["order_id"] == 1001 and row["product_id"] == 1)
+    pending = next(row for row in rows if row["status"] != "fulfilled")
+    rating = {"line_id": line["line_id"], "stars": 3}
+    other.api("orders/rating", rating, status=404)
+    vendor.api("orders/rating", rating, status=403)
+    buyer.api("orders/rating", rating, csrf=False, status=403)
+    buyer.api("orders/rating", {**rating, "stars": 6}, status=422)
+    buyer.api("orders/rating", {**rating, "line_id": pending["line_id"]}, status=409)
+    assert buyer.api("orders/rating", rating) == {"stars": 3}
+    assert buyer.api("orders/rating", {**rating, "stars": 1}) == {"stars": 1}
+    product = next(row for row in buyer.api("catalog") if row["id"] == 1)
+    assert float(product["rating"]) == 3
+    assert all(row["stars"] == 1 for row in buyer.api("orders") if row["product_id"] == 1)
+    print("PASS buyer ratings, fulfillment and ownership checks, updates and catalog average")
+
+def deletion_scenarios(url):
+    buyer = Client(url).login("north")
+    vendor = Client(url).login("form")
+    other = Client(url).login("field")
+    product = next(p for p in vendor.api("vendor/products") if p["id"] == 1)
+    request = {"id": product["id"], "version": product["version"]}
+    history = buyer.api("orders")
+    cart = buyer.api("cart", {"id": product["id"], "quantity": 1})
+    other.api("vendor/products", request, status=403, method="DELETE")
+    vendor.api("vendor/products", request, status=403, csrf=False, method="DELETE")
+    vendor.api("vendor/products", {**request, "version": request["version"] - 1}, status=409, method="DELETE")
+    assert vendor.api("vendor/products", request, method="DELETE")["ok"]
+    assert not any(p["id"] == product["id"] for p in buyer.api("catalog"))
+    assert not any(p["id"] == product["id"] for p in vendor.api("vendor/products"))
+    buyer.api("checkout", {"key": cart["key"]}, status=409)
+    assert not buyer.api("cart")["items"]
+    assert buyer.api("orders") == history
+    review = buyer.api("orders/1001/reorder")
+    assert next(line for line in review["lines"] if line["product_id"] == product["id"])["maximum"] == 0
+    print("PASS vendor deletion ownership, CSRF, edit versions, cart cleanup and historical purchases")
+
+def account_scenarios(url):
+    guest = Client(url)
+    assert "/login?next=%2Fprofile" in guest.opener.open(url + "/profile").geturl()
+    assert "/login?next=%2Fsettings" in guest.opener.open(url + "/settings").geturl()
+    guest.api("account/profile", {"name": "New name"}, status=401)
+    guest.api("account/password", {}, status=401)
+
+    buyer = Client(url).login("north")
+    vendor = Client(url).login("form")
+    buyer.api("account/profile", {"name": "New name"}, status=403, csrf=False)
+    buyer.api("account/profile", {"name": " "}, status=422)
+    buyer.api("account/profile", {"name": "A" * 101}, status=422)
+    assert buyer.api("account/profile", {"name": "  North Retail QA  "}) == {"name": "North Retail QA"}
+    assert 'value="North Retail QA"' in buyer.opener.open(url + "/profile").read().decode()
+    assert 'value="Form Studio"' in vendor.opener.open(url + "/profile").read().decode()
+    assert 'value="North Retail QA"' in Client(url).login("north").opener.open(url + "/profile").read().decode()
+    assert vendor.api("account/profile", {"name": "Form Studio QA"}) == {"name": "Form Studio QA"}
+
+    old_password = "FormaDemo24!"
+    new_password = "FormaAccountTest-428!"
+    change = {"current_password": old_password, "new_password": new_password, "confirm_password": new_password}
+    vendor.api("account/password", change, status=403, csrf=False)
+    vendor.api("account/password", {**change, "new_password": "short"}, status=422)
+    vendor.api("account/password", {**change, "confirm_password": "different"}, status=422)
+    vendor.api("account/password", {**change, "current_password": "incorrect"}, status=422)
+    assert vendor.api("account/password", change) == {"ok": True}
+    assert vendor.opener.open(url + "/settings").geturl() == url + "/settings"
+    guest.api("login", {"email": "form@forma.test", "password": old_password}, status=401)
+    result = guest.api("login", {"email": "form@forma.test", "password": new_password})
+    assert result["name"] == "Form Studio QA" and result["role"] == "vendor"
+    print("PASS buyer/vendor profile persistence, guest access, CSRF, password validation and sign-in")
+    outsider = Client(url)
+    outsider.api("account/recovery", {"current_password": old_password}, status=401)
+    buyer.api("account/recovery", {"current_password": "incorrect"}, status=422)
+    code = buyer.api("account/recovery", {"current_password": old_password})["code"]
+    reset = {"email": "north@forma.test", "code": code, "new_password": new_password,
+             "confirm_password": new_password}
+    outsider.api("reset-password", reset, csrf=False, status=403)
+    outsider.api("reset-password", {**reset, "email": "bay@forma.test"}, status=422)
+    assert outsider.api("reset-password", reset) == {"ok": True}
+    outsider.api("reset-password", reset, status=422)
+    outsider.api("login", {"email": reset["email"], "password": old_password}, status=401)
+    assert outsider.api("login", {"email": reset["email"], "password": new_password})["role"] == "buyer"
+    print("PASS one-time recovery, password verification, account ownership and re-login")
+
+
+def registration_scenarios(url):
+    password = "NewAccountDemo123!"
+    request = {"name": "New account", "email": "new-buyer@example.test",
+               "new_password": password, "confirm_password": password}
+    buyer = Client(url)
+    buyer.api("register", request, csrf=False, status=403)
+    buyer.api("register", {**request, "role": "admin"}, status=422)
+    result = buyer.api("register", request, status=201)
+    assert result["role"] == "buyer"
+    assert buyer.api("orders") == []
+    buyer.api("vendor/products", status=403)
+
+    vendor = Client(url)
+    details = {**request, "name": "New Supplier", "email": "new-vendor@example.test", "role": "vendor"}
+    result = vendor.api("register", details, status=201)
+    assert result["role"] == "vendor"
+    assert vendor.api("vendor/products") == [] and vendor.api("vendor/orders") == []
+    vendor.api("orders", status=403)
+    guest = Client(url)
+    guest.api("register", details, status=409)
+    assert guest.api("login", {"email": details["email"], "password": password})["role"] == "vendor"
+    print("PASS buyer and vendor registration, role validation, duplicate email and workspace access")
+
+
+def security_scenarios(urls, env):
+    first, second = (Client(url) for url in urls)
+    assert first.api("login", {"email": "field@forma.test", "password": "FormaDemo24!"})["role"] == "vendor"
+    first.refresh()
+    products = first.api("vendor/products")
+    product = products[0]
+    first.api("vendor/products", {**product, "stock": product["stock"] + 1})
+    inventory_id = first.last_headers["X-Request-ID"]
+
+    wrong = {"email": "field@forma.test", "password": "InvalidSecretTest-529!"}
+    for _ in range(9):
+        try:
+            second.api("login", wrong, status=401)
+        except AssertionError as failure:
+            assert failure.args[0][1] == 429
+            break
+    else:
+        raise AssertionError("Repeated sign-in attempts did not trigger HTTP 429")
+    first.api("login", wrong, status=429)
+    blocked_id = first.last_headers["X-Request-ID"]
+    assert 1 <= int(first.last_headers["Retry-After"]) <= 600
+    assert first.api("catalog")
+    result = subprocess.run([*PHP, "backend/audit.php"], env=env, cwd=ROOT,
+                            check=True, capture_output=True, text=True)
+    assert wrong["password"] not in result.stdout and wrong["email"] not in result.stdout
+    events = {event["request_id"]: event for event in map(json.loads, result.stdout.splitlines())}
+    inventory = events[inventory_id]
+    assert inventory["action"] == "vendor.inventory_save" and inventory["http_status"] == 200
+    assert inventory["user_id"] is not None and inventory["ip_address"] == "127.0.0.1"
+    blocked = events[blocked_id]
+    assert blocked["action"] == "account.sign_in" and blocked["http_status"] == 429
+    assert blocked["created_at"]
+    print("PASS shared authentication rate limit, Retry-After and credential-free audit log")
+
+
 def main():
+    if "--browser" in sys.argv:
+        check = ["-r", "exit(function_exists('imagewebp') ? 0 : 1);"]
+        if subprocess.run([*PHP, *check], cwd=ROOT).returncode:
+            PHP.extend(["-d", "extension=gd"])
+            subprocess.run([*PHP, *check], cwd=ROOT, check=True)
     name="forma_qa_"+secrets.token_hex(6)
     def run(*args,env=None):
         subprocess.run([*PHP,*args],cwd=ROOT,env=env,check=True)
@@ -211,6 +404,7 @@ def main():
             config=Path(folder)/"test.env"
             config.write_text(re.sub(r"(?m)^DB_NAME=.*$", "DB_NAME="+name, (ROOT/".env").read_text(), count=1))
             env={**os.environ,"FORMA_ENV_FILE":str(config)}
+            run("backend/setup.php",env=env)
             run("backend/setup.php",env=env)
             urls=[]
             for _ in range(2):
@@ -227,6 +421,11 @@ def main():
             reorder_scenarios(urls)
             if "--browser" in sys.argv:
                 subprocess.run(["node","tests/browser.cjs",urls[0]],cwd=ROOT,env={**env,"TMP":folder,"TEMP":folder,"TMPDIR":folder},check=True)
+            rating_scenarios(urls[0])
+            deletion_scenarios(urls[0])
+            account_scenarios(urls[0])
+            registration_scenarios(urls[0])
+            security_scenarios(urls, env)
     finally:
         for server in servers:
             server.terminate();server.wait(timeout=10)

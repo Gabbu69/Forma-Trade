@@ -1,7 +1,21 @@
 <section class="hero"><div class="hero-content"><h1>Workspace<br>essentials.</h1><p>Wholesale desk accessories, peripherals, and lighting from independent suppliers.</p><a class="hero-button" href="#catalog">Browse products <i data-lucide="chevrons-down"></i></a></div></section>
 <section id="catalog"><div class="section-top"><div><h2>Product catalog</h2><p id="resultCount" aria-live="polite">Loading products…</p></div>
 <div class="toolbar"><label class="search"><i data-lucide="search"></i><input id="search" type="search" maxlength="100" placeholder="Search products or suppliers" aria-label="Search products or suppliers"></label>
-<label class="sort"><i data-lucide="arrow-up-down"></i><select id="sort" aria-label="Sort products"><option value="">Featured</option><option value="price">Price: low to high</option><option value="high">Price: high to low</option><option value="name">Name: A to Z</option></select></label>
+<div class="dropdown catalog-sort">
+  <button type="button" class="sort" id="sort" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="sortOptions" aria-labelledby="sortTitle sortValue">
+    <span id="sortTitle" class="visually-hidden">Sort products</span>
+    <i data-lucide="arrow-up-down" aria-hidden="true"></i>
+    <span id="sortValue">Featured</span>
+    <i class="sort-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end sort-menu" id="sortOptions" aria-labelledby="sortTitle">
+    <?php foreach ([''=>'Featured','price'=>'Price: low to high','high'=>'Price: high to low','name'=>'Name: A to Z'] as $value=>$label): ?>
+      <li><button type="button" class="dropdown-item" data-sort-value="<?=h($value)?>" aria-pressed="<?=$value===''?'true':'false'?>">
+        <span><?=h($label)?></span><i data-lucide="check" aria-hidden="true"></i>
+      </button></li>
+    <?php endforeach; ?>
+  </ul>
+</div>
 <button class="secondary mobile-filter" data-bs-toggle="offcanvas" data-bs-target="#filters"><i data-lucide="sliders-horizontal"></i> Filters</button></div></div>
 <div class="catalog-layout"><aside id="filters" class="offcanvas-lg offcanvas-start" tabindex="-1" aria-labelledby="filtersTitle"><div class="filter-inner">
 <div class="filters-title"><h3 id="filtersTitle"><i data-lucide="sliders-horizontal"></i> Filters</h3><button id="reset" class="text-action">Reset</button><button class="btn-close d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#filters" aria-label="Close filters"></button></div>
@@ -17,7 +31,15 @@
   <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
     <div class="modal-header"><span class="supplier">Pack details</span><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close pack preview"></button></div>
     <div class="modal-body preview-layout">
-      <img id="previewPhoto" alt="">
+      <div class="preview-gallery">
+        <div class="preview-image">
+          <img id="previewPhoto" alt="">
+          <button class="gallery-arrow gallery-prev" id="previewPrevPhoto" type="button" aria-label="Previous photo" hidden><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+          <button class="gallery-arrow gallery-next" id="previewNextPhoto" type="button" aria-label="Next photo" hidden><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+        </div>
+        <div id="previewThumbs" role="group" aria-label="Product photos"></div>
+        <span id="previewPhotoStatus" class="visually-hidden" aria-live="polite"></span>
+      </div>
       <div class="preview-info">
         <p class="supplier" id="previewSupplier"></p><h2 id="previewName"></h2>
         <dl class="pack-facts"><div><dt>Pack price</dt><dd id="previewPrice"></dd></div><div><dt>Units per pack</dt><dd id="previewSize"></dd></div><div><dt id="unitCostLabel">Unit cost</dt><dd id="previewUnit"></dd></div><div><dt>Available stock</dt><dd id="previewStock"></dd></div></dl>

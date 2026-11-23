@@ -14,20 +14,31 @@
     root.dataset.appearance = choice;
     root.dataset.bsTheme =
       choice === "system" ? (system.matches ? "dark" : "light") : choice;
-    const select = document.getElementById("appearance");
-    if (select) {
-      select.value = choice;
-      const label = select.closest("label");
-      label.title = "Appearance · " + select.selectedOptions[0].text;
+    for (const option of document.querySelectorAll("[data-theme-choice]")) {
+      option.checked = option.value === choice;
+    }
+    const control = document.getElementById("appearance");
+    if (control) {
+      const dark = root.dataset.bsTheme === "dark";
+      control.title = dark ? "Switch to light mode" : "Switch to dark mode";
+      control.setAttribute("aria-label", control.title);
       const glyph = document.createElement("i");
-      glyph.dataset.lucide = { system: "monitor", light: "sun", dark: "moon" }[
-        choice
-      ];
+      glyph.dataset.lucide = dark ? "moon" : "sun";
       glyph.setAttribute("aria-hidden", "true");
-      label.querySelector("[data-lucide]").replaceWith(glyph);
-      window.lucide?.createIcons({ root: label });
+      control.replaceChildren(glyph);
+      window.lucide?.createIcons({ root: control });
     }
     window.dispatchEvent(new Event("forma:appearance"));
+  }
+  function select(choice) {
+    const feedback = document.getElementById("themeFeedback");
+    if (feedback) feedback.textContent = "";
+    try {
+      localStorage.setItem(storageKey, choice);
+    } catch {
+      if (feedback) feedback.textContent = "This browser couldn't save your theme.";
+    }
+    apply(choice);
   }
   apply(read());
   system.addEventListener("change", () =>
@@ -38,13 +49,12 @@
   });
   document.addEventListener("DOMContentLoaded", () => {
     const control = document.getElementById("appearance");
-    if (!control) return;
     apply(document.documentElement.dataset.appearance);
-    control.addEventListener("change", () => {
-      try {
-        localStorage.setItem(storageKey, control.value);
-      } catch {}
-      apply(control.value);
+    control?.addEventListener("click", () => {
+      select(document.documentElement.dataset.bsTheme === "dark" ? "light" : "dark");
     });
+    for (const option of document.querySelectorAll("[data-theme-choice]")) {
+      option.addEventListener("change", () => select(option.value));
+    }
   });
 })();

@@ -27,6 +27,6 @@ The low-stock and awaiting-fulfillment metrics open filtered worklists. A vendor
 
 ## Presentation and operation
 
-The catalog opens at the root URL. The appearance selector supports System, Light, and Dark, with a locally stored browser preference. Inter, icons, images, and chart libraries are bundled for offline use. Its pale photo panels, graphite type, raised controls, and blue actions share styling with the cart, order history, and vendor workspace. Small viewports use a filter drawer and stacked order rows. Form controls have labels and focus indicators. Charts expose the same values as text. The database, images, libraries, and application all run locally for the defense.
+The catalog opens at the root URL. The header button switches between light and dark. It follows the system appearance until you choose a theme and stores that choice locally. Inter, icons, images, and chart libraries are bundled for offline use. Its pale photo panels, graphite type, raised controls, and blue actions share styling with the cart, order history, and vendor workspace. Small viewports use a filter drawer and stacked order rows. Form controls have labels and focus indicators. Charts expose the same values as text. The database, images, libraries, and application all run locally for the defense.
 
 Checkout records a purchase order in pesos. Fulfillment is tracked per supplier. The seed includes previously fulfilled orders and inventory counts as of the start of the demonstration.
