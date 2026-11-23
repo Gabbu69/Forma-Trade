@@ -599,7 +599,7 @@ let vendorProducts = [],
   vendorOrders = [],
   chart = null,
   editProduct = null;
-function orderRating(line) {
+function orderRating(line, onRatingSaved) {
   const rating = element("fieldset", {
     class: "rating-stars",
     "data-rating-product": line.product_id,
@@ -626,6 +626,7 @@ function orderRating(line) {
           group.querySelector('input[value="' + result.stars + '"]').checked = true;
       });
       note("Rating saved.");
+      onRatingSaved?.(line.product_id, result.stars);
     } catch (error) {
       note(error.message, "error");
     } finally {
@@ -640,7 +641,7 @@ const orderStatusLabels = {
   processing: "In Transit",
   fulfilled: "Completed",
 };
-function renderOrders(rows, vendor = false) {
+function renderOrders(rows, vendor = false, onRatingSaved, partial = false) {
   const host = $("#ordersView");
   host.replaceChildren();
   if (!rows.length) {
@@ -693,7 +694,7 @@ function renderOrders(rows, vendor = false) {
               ),
             ),
             element("strong", {}, peso(lineTotal(l) / 100)),
-            !vendor && row.status === "fulfilled" ? orderRating(l) : null,
+            !vendor && row.status === "fulfilled" ? orderRating(l, onRatingSaved) : null,
           ),
         );
       if (vendor && row.status !== "fulfilled") {
@@ -726,9 +727,11 @@ function renderOrders(rows, vendor = false) {
         );
       }
     }
-    box.append(
-      element("div", { class: "order-total" }, "Total " + peso(sum(order))),
-    );
+    if (vendor || order.length > 1) {
+      box.append(
+        element("div", { class: "order-total" }, (partial ? "Shown subtotal " : "Total ") + peso(sum(order))),
+      );
+    }
     if (!vendor) {
       box.append(
         button(
@@ -742,6 +745,41 @@ function renderOrders(rows, vendor = false) {
     host.append(box);
   }
   icons();
+}
+function showPurchases(rows) {
+  const views = {
+    all: { heading: "Purchase history", matches: () => true },
+    ship: { heading: "To Ship", matches: (row) => row.status === "received", empty: "No items are waiting to ship." },
+    receive: { heading: "To Receive", matches: (row) => row.status === "processing", empty: "No items are in transit." },
+    rate: { heading: "To Rate", matches: (row) => row.status === "fulfilled" && row.stars == null, empty: "You're caught up on ratings." },
+  };
+  const controls = [...document.querySelectorAll("[data-purchase-view]")];
+  let active = "all";
+  function ratingSaved(productId, stars) {
+    for (const row of rows)
+      if (row.product_id === productId) row.stars = stars;
+    if (active === "rate") {
+      render();
+      controls.find((control) => control.dataset.purchaseView === active).focus();
+    }
+  }
+  function render() {
+    const view = views[active];
+    const matches = rows.filter(view.matches);
+    $("#purchaseResults").textContent = view.heading;
+    if (view.empty && !matches.length)
+      $("#ordersView").replaceChildren(empty("No items", view.empty));
+    else
+      renderOrders(matches, false, ratingSaved, active !== "all");
+  }
+  for (const control of controls)
+    control.onclick = () => {
+      active = control.dataset.purchaseView;
+      for (const item of controls)
+        item.setAttribute("aria-pressed", String(item === control));
+      render();
+    };
+  render();
 }
 function setTab(name, filtered = false) {
   vendorFilter = filtered ? name : "";
@@ -1041,7 +1079,7 @@ async function init() {
   }
   if (page === "orders") {
     const rows = await api("orders");
-    renderOrders(rows);
+    showPurchases(rows);
     const placed = new URLSearchParams(location.search).get("placed");
     if (placed && rows.some((r) => String(r.order_id) === placed))
       $("#confirmation").append(

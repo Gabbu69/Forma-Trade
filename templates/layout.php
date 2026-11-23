@@ -8,8 +8,14 @@
 </head><body data-page="<?=h($page)?>" data-role="<?=h($user['role']??'guest')?>">
 <a class="skip" href="#main">Skip to content</a>
 <header class="mast"><div class="frame mast-inner"><a href="/" class="brand" aria-label="Forma Trade home"><img src="/static/img/forma.svg" alt="" width="34" height="34"><span>Forma <b>Trade</b></span></a>
-<nav aria-label="Workspace" class="mainnav"><?php if(($user['role']??'')==='vendor'):?><a class="active" href="/vendor">Vendor workspace</a><?php else:?>
-<a class="<?=$page==='catalog'?'active':''?>" href="/">Marketplace</a><a class="<?=$page==='orders'?'active':''?>" href="/orders">Purchase orders</a><?php endif;?></nav>
+<nav aria-label="Workspace" class="mainnav">
+<?php if(($user['role']??'')==='vendor'):?>
+  <a href="/vendor" <?=$page==='vendor'?'aria-current="page"':''?>><i data-lucide="layout-dashboard" aria-hidden="true"></i><span>Vendor workspace</span></a>
+<?php else:?>
+  <a href="/" <?=$page==='catalog'?'aria-current="page"':''?>><i data-lucide="store" aria-hidden="true"></i><span>Marketplace</span></a>
+  <a href="/orders" <?=$page==='orders'?'aria-current="page"':''?>><i data-lucide="clipboard-list" aria-hidden="true"></i><span>Purchase orders</span></a>
+<?php endif;?>
+</nav>
 <div class="nav-actions"><button type="button" class="appearance" id="appearance" aria-label="Switch color theme"><i data-lucide="sun" aria-hidden="true"></i></button><?php if(($user['role']??'')!=='vendor'):?><a href="/cart" class="cart-link" aria-label="Purchase cart"><i data-lucide="shopping-bag"></i><span>Cart</span><b id="cartCount"><?=h($count)?></b></a><?php endif;?>
 <?php if($user):?><button id="logout" class="account" title="Sign out of <?=h($user['name'])?>"><i data-lucide="log-out"></i><span>Sign out</span></button><?php else:?><a href="/login" class="account" aria-label="Sign in"><i data-lucide="circle-user-round"></i><span>Sign in</span></a><?php endif;?></div></div></header>
 <main id="main" class="frame"><?php if($page==='error'):?><section class="page-title"><h1><?=h($status)?></h1><p><?=h($message)?></p><a class="back mt-3" href="/">Return to workspace</a></section><?php else: require __DIR__.'/'.$page.'.php'; endif;?></main>

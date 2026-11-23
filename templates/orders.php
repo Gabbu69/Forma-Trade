@@ -1,4 +1,15 @@
-<div class="page-title"><a class="back" href="/"><i data-lucide="chevron-left"></i> Marketplace</a><h1>Purchase orders</h1><p><?=h($user['name'])?> · Fulfillment by supplier</p></div><div id="confirmation"></div><div id="ordersView"></div>
+<div class="page-title"><h1>My Purchases</h1><p><?=h($user['name'])?></p></div>
+<div id="confirmation"></div>
+<section class="panel purchase-shortcuts" aria-label="Filter purchases">
+  <div class="purchase-shortcuts-grid">
+    <button type="button" class="purchase-shortcut" data-purchase-view="all" aria-pressed="true" aria-controls="ordersView"><i data-lucide="history" aria-hidden="true"></i><span>History</span></button>
+    <button type="button" class="purchase-shortcut" data-purchase-view="ship" aria-pressed="false" aria-controls="ordersView"><i data-lucide="package" aria-hidden="true"></i><span>To Ship</span></button>
+    <button type="button" class="purchase-shortcut" data-purchase-view="receive" aria-pressed="false" aria-controls="ordersView"><i data-lucide="truck" aria-hidden="true"></i><span>To Receive</span></button>
+    <button type="button" class="purchase-shortcut" data-purchase-view="rate" aria-pressed="false" aria-controls="ordersView"><i data-lucide="star" aria-hidden="true"></i><span>To Rate</span></button>
+  </div>
+</section>
+<h2 class="visually-hidden" id="purchaseResults" aria-live="polite">Purchase history</h2>
+<div id="ordersView" role="region" aria-labelledby="purchaseResults"></div>
 <script defer src="/static/js/reorder.js"></script>
 <div class="modal fade" id="reorderModal" tabindex="-1" aria-labelledby="reorderTitle">
   <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><form class="modal-content" id="reorderForm">
