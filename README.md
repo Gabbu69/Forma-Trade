@@ -4,9 +4,9 @@
 
 [![Forma Trade checks](https://github.com/Gabbu69/Forma-Trade/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/Gabbu69/Forma-Trade/actions/workflows/checks.yml)
 
-[Run locally](#run-locally) · [Demo accounts](#demo-accounts) · [Defense walkthrough](#defense-walkthrough) · [Tests](#tests-and-audit-log)
+[Run locally](#run-locally) · [Host the full app](#host-the-full-app) · [Demo accounts](#demo-accounts) · [Defense walkthrough](#defense-walkthrough) · [Tests](#tests-and-audit-log)
 
-![Forma Trade marketplace with catalog filters, product photos, supplier names, and wholesale pack prices](docs/marketplace.jpg)
+![Forma Trade marketplace showing the featured product slideshow, catalog filters, and wholesale pack prices](docs/marketplace.jpg)
 
 ## What you can do
 
@@ -17,6 +17,8 @@
 | Rate completed purchases and use **Buy Again** to review current terms before reordering. | Review daily and monthly sales and export the figures as CSV. |
 
 Both roles can edit their profile, choose a theme, and manage notifications. Generate a one-time recovery code in **Settings** while signed in and save it somewhere safe.
+
+The marketplace opens with an automatic slideshow of up to five in-stock products. Each slide shows the supplier, pack price, and pack size. Select **View product** to open the pack preview. Browsers set to reduce motion show a static featured product.
 
 ## Run locally
 
@@ -53,6 +55,14 @@ php -d extension=pdo_mysql backend/setup.php
 The same setup command applies additive upgrades to an existing database. Sessions created before session versioning require a fresh sign-in after the upgrade.
 
 </details>
+
+## Host the full app
+
+Use an Apache host with PHP 8.1+, PDO MySQL, mbstring, GD with WebP support, and a MySQL 8 or MariaDB database. GitHub Pages serves static files, while sign-in, checkout, and vendor tools require the PHP application and database.
+
+1. Upload the repository and set the site's document root to `backend/`. Enable Apache URL rewriting and allow `backend/.htaccess` to route requests through `index.php`.
+2. Copy `.env.example` to `.env` at the repository root and enter the hosted database settings. Grant the database user the permissions listed in the local setup above.
+3. Run `php backend/setup.php` from the repository root, then open the site's HTTPS URL. Setup seeds shared demo accounts. Change their passwords before using the site for anything beyond a public demo.
 
 ## Demo accounts
 
