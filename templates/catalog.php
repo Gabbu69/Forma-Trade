@@ -1,4 +1,7 @@
-<section class="hero"><div class="hero-content"><h1>Workspace<br>essentials.</h1><p>Wholesale desk accessories, peripherals, and lighting from independent suppliers.</p><a class="hero-button" href="#catalog">Browse products <i data-lucide="chevrons-down"></i></a></div></section>
+<h1 class="visually-hidden">Forma Trade marketplace</h1>
+<section id="featuredProducts" class="product-showcase carousel slide" aria-label="Featured products" aria-roledescription="carousel" hidden>
+  <div class="carousel-inner"></div>
+</section>
 <section id="catalog"><div class="section-top"><div><h2>Product catalog</h2><p id="resultCount" aria-live="polite">Loading products…</p></div>
 <div class="toolbar"><label class="search"><i data-lucide="search"></i><input id="search" type="search" maxlength="100" placeholder="Search products or suppliers" aria-label="Search products or suppliers"></label>
 <div class="dropdown catalog-sort">

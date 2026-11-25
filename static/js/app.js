@@ -388,6 +388,65 @@ function initPreview() {
     }
   };
 }
+function initProductShowcase(products) {
+  const root = $("#featuredProducts");
+  const featured = products.filter((item) => Number(item.stock) > 0).slice(0, 5);
+  if (!root.hidden || !featured.length) return;
+  const deck = root.querySelector(".carousel-inner");
+  featured.forEach((item, index) => {
+    const view = button("View product", (event) => openPreview(item, event.currentTarget), "primary");
+    const imageKey = item.uploaded_photos ? item.image : item.images?.[2] || item.image;
+    deck.append(element("div", {
+      class: "carousel-item" + (index === 0 ? " active" : ""),
+      role: "group", "aria-roledescription": "slide",
+      "aria-label": (index + 1) + " of " + featured.length,
+    }, element("div", { class: "showcase-layout" },
+      element("div", { class: "showcase-copy" },
+        element("p", { class: "showcase-supplier" }, item.vendor + " · " + item.category),
+        element("h2", {}, item.name),
+        element("p", { class: "showcase-price" },
+          element("strong", {}, peso(item.price)), " / pack · ",
+          item.pack_size + (Number(item.pack_size) === 1 ? " unit" : " units")),
+        view,
+      ),
+      element("img", { class: "showcase-photo", src: photoUrl(imageKey), alt: "",
+        loading: index === 0 ? "eager" : "lazy" }),
+    )));
+  });
+  root.hidden = false;
+  if (featured.length === 1) return;
+  const carousel = new bootstrap.Carousel(root, {
+    interval: false, pause: false, keyboard: false, touch: false,
+  });
+  const motion = matchMedia("(prefers-reduced-motion: reduce)");
+  let hovering = false, focused = false, visible = false, timer;
+  function schedule() {
+    clearInterval(timer);
+    if (!motion.matches && visible && !hovering && !focused && !document.hidden)
+      timer = setInterval(() => {
+        if (!$("#packPreview").classList.contains("show")) carousel.next();
+      }, 6500);
+  }
+  root.addEventListener("focusin", () => {
+    focused = true;
+    schedule();
+  });
+  root.addEventListener("focusout", (event) => {
+    focused = root.contains(event.relatedTarget);
+    schedule();
+  });
+  root.addEventListener("pointerenter", (event) => {
+    hovering = event.pointerType === "mouse";
+    schedule();
+  });
+  root.addEventListener("pointerleave", () => { hovering = false; schedule(); });
+  new IntersectionObserver(([entry]) => {
+    visible = entry.isIntersecting;
+    schedule();
+  }).observe(root);
+  document.addEventListener("visibilitychange", schedule);
+  motion.addEventListener("change", schedule);
+}
 async function catalogPage() {
   initPreview();
   const form = $("#filterForm"),
@@ -420,7 +479,9 @@ async function catalogPage() {
     params.set("q", $("#search").value.trim());
     params.set("sort", sort);
     try {
-      const items = await api("catalog?" + params, undefined, signal);
+      const populateShowcase = $("#featuredProducts").hidden && ![...params.values()].some(Boolean);
+      const items = await api("catalog?" + params, undefined, populateShowcase ? undefined : signal);
+      if (populateShowcase) initProductShowcase(items);
       if (signal.aborted) return;
       list.replaceChildren(...items.map(productCard));
       if (!items.length)
