@@ -10,20 +10,29 @@ permissions:
 
 jobs:
   acceptance:
+    name: Acceptance on ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: mariadb:10.11
+            health: healthcheck.sh --connect --innodb_initialized
+          - image: mysql:8.0
+            health: mysqladmin ping -h 127.0.0.1
     runs-on: ubuntu-24.04
     services:
-      mariadb:
-        image: mariadb:10.11
+      database:
+        image: ${{ matrix.image }}
         env:
-          MARIADB_ROOT_PASSWORD: ci-admin-password
-          MARIADB_ROOT_HOST: '%'
-          MARIADB_DATABASE: forma_trade
-          MARIADB_USER: forma_app
-          MARIADB_PASSWORD: ci-app-password
+          MYSQL_ROOT_PASSWORD: ci-admin-password
+          MYSQL_ROOT_HOST: '%'
+          MYSQL_DATABASE: forma_trade
+          MYSQL_USER: forma_app
+          MYSQL_PASSWORD: ci-app-password
         ports:
           - 33317:3306
         options: >-
-          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-cmd "${{ matrix.health }}"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 15

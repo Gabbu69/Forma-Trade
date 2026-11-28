@@ -16,19 +16,22 @@
   <a href="/orders" <?=$page==='orders'?'aria-current="page"':''?>><i data-lucide="clipboard-list" aria-hidden="true"></i><span>Purchase orders</span></a>
 <?php endif;?>
 </nav>
-<div class="nav-actions"><button type="button" class="appearance" id="appearance" aria-label="Switch color theme"><i data-lucide="sun" aria-hidden="true"></i></button><?php if(($user['role']??'')!=='vendor'):?><a href="/cart" class="cart-link" aria-label="Purchase cart"><i data-lucide="shopping-bag"></i><span>Cart</span><b id="cartCount"><?=h($count)?></b></a><?php endif;?>
+<div class="nav-actions"><button type="button" class="appearance" id="appearance" aria-label="Switch color theme"><i data-lucide="sun" aria-hidden="true"></i></button><?php if(($user['role']??'')!=='vendor'):?><a href="/cart" class="cart-link" aria-label="Purchase cart"><i data-lucide="shopping-bag" aria-hidden="true"></i><span>Cart</span><b id="cartCount"><?=h($count)?></b></a><?php endif;?>
 <?php if($user):?>
   <a href="/notifications" class="notification-link" id="notificationLink" <?=$page==='notifications'?'aria-current="page"':''?> aria-label="Notifications<?=$unreadNotifications?', '.$unreadNotifications.' unread':''?>">
     <i data-lucide="bell" aria-hidden="true"></i><b id="notificationCount" aria-hidden="true"<?=$unreadNotifications?'':' hidden'?>><?=h($unreadNotifications > 99 ? '99+' : $unreadNotifications)?></b>
   </a>
   <div class="dropdown">
     <button type="button" class="account account-trigger" id="accountMenu" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu">
-      <span class="account-menu-avatar" data-account-avatar aria-hidden="true"><?php if ($accountPhoto): ?><img src="<?=h($accountPhoto)?>" alt=""><?php else: ?><i data-lucide="circle-user-round"></i><?php endif; ?></span><span>Account</span><i class="account-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
+      <span class="account-menu-avatar" data-account-avatar aria-hidden="true"><?php if ($accountPhoto): ?><img src="<?=h($accountPhoto)?>" alt=""><?php else: ?><i data-lucide="circle-user-round"></i><?php endif; ?></span><span class="account-trigger-label">Account</span><span class="role-badge role-badge-<?=h($user['role'])?>" aria-hidden="true"><?=h(ucfirst($user['role']))?></span><i class="account-chevron" data-lucide="chevron-down" aria-hidden="true"></i>
     </button>
     <ul class="dropdown-menu dropdown-menu-end account-menu" aria-labelledby="accountMenu">
       <li class="account-menu-name">
         <span class="account-menu-avatar" data-account-avatar aria-hidden="true"><?php if ($accountPhoto): ?><img src="<?=h($accountPhoto)?>" alt=""><?php else: ?><i data-lucide="circle-user-round"></i><?php endif; ?></span>
-        <span data-member-name><?=h($user['name'])?></span>
+        <div class="account-menu-identity">
+          <span data-member-name><?=h($user['name'])?></span>
+          <small class="account-menu-role"><?=h($user['role']==='vendor'?'Vendor workspace':'Buyer account')?></small>
+        </div>
       </li>
       <li><a class="dropdown-item" href="/profile" <?=$page==='profile'?'aria-current="page"':''?>><i data-lucide="user-round" aria-hidden="true"></i>Profile</a></li>
       <li><a class="dropdown-item" href="/settings" <?=$page==='settings'?'aria-current="page"':''?>><i data-lucide="settings" aria-hidden="true"></i>Settings</a></li>
@@ -37,8 +40,28 @@
     </ul>
   </div>
 <?php else:?><a href="/login" class="account" aria-label="Sign in"><i data-lucide="circle-user-round" aria-hidden="true"></i><span>Sign in</span></a><?php endif;?></div></div></header>
-<main id="main" class="frame"><?php if($page==='error'):?><section class="page-title"><h1><?=h($status)?></h1><p><?=h($message)?></p><a class="back mt-3" href="/">Return to workspace</a></section><?php else: require __DIR__.'/'.(in_array($page,['profile','settings'],true)?'account':$page).'.php'; endif;?></main>
-<footer class="frame"><span>Forma Trade</span><span>Wholesale workspace supplies</span></footer>
+<main id="main" class="frame"><?php if($page==='error'):?><section class="page-title"><div class="panel error-panel"><span class="badge-pill error-code">Error <?=h($status)?></span><h1><?=h($status)?></h1><p><?=h($message)?></p><a class="primary mt-3 d-inline-flex" href="<?=($user['role']??'')==='vendor'?'/vendor':'/'?>">Return to workspace</a></div></section><?php else: require __DIR__.'/'.(in_array($page,['profile','settings'],true)?'account':$page).'.php'; endif;?></main>
+<footer class="frame site-footer">
+  <div class="footer-brand"><span>Forma Trade</span><span class="footer-tagline">B2B wholesale workspace supplies</span></div>
+  <nav class="footer-links" aria-label="Footer navigation">
+    <?php if(($user['role']??'')==='vendor'):?>
+      <a href="/vendor">Dashboard</a>
+      <a href="/vendor#inventory">Inventory</a>
+      <a href="/notifications">Notifications</a>
+      <a href="/settings">Settings</a>
+    <?php elseif($user):?>
+      <a href="/">Marketplace</a>
+      <a href="/cart">Cart</a>
+      <a href="/orders">Purchase orders</a>
+      <a href="/notifications">Notifications</a>
+    <?php else:?>
+      <a href="/">Marketplace</a>
+      <a href="/cart">Cart</a>
+      <a href="/login">Sign in</a>
+      <a href="/register">Register</a>
+    <?php endif;?>
+  </nav>
+</footer>
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="notice" class="toast" role="status" aria-live="polite" aria-atomic="true">
     <span class="notice-symbol" aria-hidden="true"></span>

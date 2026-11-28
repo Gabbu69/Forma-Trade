@@ -21,9 +21,9 @@ $notificationCopy = [
         </div>
       <?php endif; ?>
     </div>
-    <nav class="notification-heading-actions mb-3" aria-label="Notification filters">
-      <a class="secondary" href="/notifications" <?=$unreadOnly?'':'aria-current="page"'?>>All notifications</a>
-      <a class="secondary" href="/notifications?unread=1" <?=$unreadOnly?'aria-current="page"':''?>>Unread only</a>
+    <nav class="notification-filter-tabs mb-3" aria-label="Notification filters">
+      <a class="notification-filter-tab" href="/notifications" <?=$unreadOnly?'':'aria-current="page"'?>>All notifications</a>
+      <a class="notification-filter-tab" href="/notifications?unread=1" <?=$unreadOnly?'aria-current="page"':''?>>Unread only<?php if($unreadNotifications):?> <span class="filter-tab-count" aria-hidden="true"><?=h($unreadNotifications)?></span><?php endif;?></a>
     </nav>
     <p class="muted" id="notificationsEmpty" tabindex="-1"<?=$notifications?' hidden':''?>><?=$unreadOnly?'No unread notifications.':'Order updates will appear here.'?></p>
     <?php if ($notifications): ?>
@@ -38,14 +38,14 @@ $notificationCopy = [
             $date = new DateTimeImmutable($item['created_at']);
         ?>
           <li class="notification-item<?=$item['read_at']===null?' notification-unread':''?>">
-            <div class="notification-symbol" aria-hidden="true"><i data-lucide="<?=h($icon)?>"></i></div>
+            <div class="notification-symbol notification-symbol-<?=h($item['event_type'])?>" aria-hidden="true"><i data-lucide="<?=h($icon)?>"></i></div>
             <div>
               <p class="notification-title"><?=h($title)?> <span class="notification-new"<?=$item['read_at']!==null?' hidden':''?>>Unread</span></p>
-              <p class="muted"><?=h($other)?> <?=h($action)?></p>
+              <p class="muted"><strong><?=h($other)?></strong> <?=h($action)?></p>
               <a class="back" href="<?=h($target)?>"><?=h($targetLabel)?><i data-lucide="arrow-right" aria-hidden="true"></i></a>
             </div>
             <div class="notification-actions">
-              <time datetime="<?=h($date->format(DATE_ATOM))?>"><?=h($date->format('M j, g:i A'))?></time>
+              <time datetime="<?=h($date->format(DATE_ATOM))?>" title="<?=h($date->format('M j, Y g:i A'))?>"><?=h($date->format('M j, g:i A'))?></time>
               <button type="button" class="notification-delete" data-delete-notification="<?=h($item['id'])?>"
                 aria-label="<?=h('Delete '.$title.' ('.$other.', '.$targetLabel.')')?>">
                 <i data-lucide="trash-2" aria-hidden="true"></i>Delete
@@ -64,7 +64,7 @@ $notificationCopy = [
 <?php if ($latestNotification): ?>
   <div class="modal fade" id="deleteNotificationsModal" tabindex="-1" aria-labelledby="deleteNotificationsTitle" aria-describedby="deleteNotificationsMessage">
     <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
-      <div class="modal-header"><h2 id="deleteNotificationsTitle">Delete all notifications?</h2></div>
+      <div class="modal-header"><h2 id="deleteNotificationsTitle">Delete all notifications?</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
       <div class="modal-body">
         <p id="deleteNotificationsMessage">This permanently clears your inbox.</p>
         <p class="form-error" role="alert"></p>
