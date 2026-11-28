@@ -1,26 +1,48 @@
 # Forma Trade
 
-**A B2B wholesale marketplace for workspace products.** Retail buyers compare pack prices, place one purchase order across suppliers, and track each shipment. Vendors manage their own catalog, stock, fulfillment, and sales.
+**ICT 07 · Web Design and Development · Senior Project Report**
 
-[![Forma Trade checks](https://github.com/Gabbu69/Forma-Trade/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/Gabbu69/Forma-Trade/actions/workflows/checks.yml)
+Option B · Multi-Vendor B2B E-Commerce and Inventory Platform
 
-[Run locally](#run-locally) · [Demo accounts](#demo-accounts) · [Defense walkthrough](#defense-walkthrough) · [Tests](#tests-and-audit-log)
+| Submitted by | GitHub username | Profile display name |
+| --- | --- | --- |
+| Edgardo Gabriel L. Paclibar | [@Gabbu69](https://github.com/Gabbu69) | Gabbu_69 |
+| Ruby Jean B. Solomon | [@Andyyy28](https://github.com/Andyyy28) | Ruby Jean B. Solomon |
 
-![Forma Trade marketplace with catalog filters, product photos, supplier names, and wholesale pack prices](docs/marketplace.jpg)
+## Project overview
 
-## What you can do
+When a retailer buys keyboards from one supplier and lamps from another, the buyer needs one purchase order while each supplier needs its own stock count and shipment record. We built Forma Trade around that transaction. Buyers compare wholesale packs, place an order in Philippine pesos, and track each shipment. Each vendor manages its own listings, fulfills its portion of the order, and sees revenue when that portion is complete.
 
-| Buyers | Vendors |
+![Forma Trade catalog showing pack prices, per-unit costs, and stock for products from Form Studio and Field Objects](docs/marketplace.jpg)
+
+## Demonstration
+
+The seeded catalog contains 18 products from two suppliers. To follow one order from checkout to sales reporting, [run the app locally](#run-locally) and use the [demo accounts](#demo-accounts).
+
+1. **Compare pack prices.** As North Retail, add one pack of Studio Mechanical Keyboards from Form Studio (4 units for ₱8,900) and one pack of Arc Task Lamps from Field Objects (2 units for ₱4,600). The cart should show **₱13,500**.
+2. **Place the purchase order.** At checkout, record the PO number. The buyer sees one order with two shipments. Each vendor sees only the items it must fulfill.
+3. **Trace fulfillment into revenue.** Sign in as each vendor, find the PO, and advance its shipment to completion. Compare the daily sales chart with the CSV for the same period. Each vendor’s figures include only its own completed sales.
+4. **Review the buyer’s record.** Return as North Retail to open the shipment notifications, print the purchase order, and rate a completed item. On the seeded PO-1001, **Buy Again** lets the buyer review current pack sizes and prices before reordering.
+
+## ICT 07 requirements and evidence
+
+| Assessment area | What to inspect |
 | --- | --- |
-| Filter by category, supplier, price, rating, and stock. Compare pack sizes and per-unit costs. | Manage listings, product photos, available packs, and stock alert thresholds. |
-| Check out across suppliers in Philippine pesos. Track each shipment and print the purchase order. | Find orders by PO number, buyer, or status, then update fulfillment. |
-| Rate completed purchases and use **Buy Again** to review current terms before reordering. | Review daily and monthly sales and export the figures as CSV. |
+| Backend and relational database | Checkout locks stock inside one transaction. If two buyers request the last pack, one completes the purchase and the other keeps an editable cart. Follow the relationship from order to supplier shipment to line item in the [data model](docs/data-model.md). |
+| Responsive interface | The catalog displays filters beside results on desktop and in a drawer on mobile. The [browser walkthrough](tests/browser.cjs) checks horizontal overflow at 375, 768, and 1440 px, keyboard focus, and both themes. |
+| Asynchronous JavaScript | Catalog filtering, cart quantities, fulfillment updates, and daily or monthly sales charts use Fetch. The [API reference](docs/api.md) describes the requests and responses behind each interaction. |
+| Security and version control | The app uses bcrypt password hashes, prepared statements, role and ownership checks, and CSRF tokens. The [acceptance suite](tests/acceptance.py) checks that one vendor cannot edit another vendor’s products. |
+| Documentation and oral defense | The [requirements](docs/requirements.md) define the workflows. The [defense checklist](docs/defense-checklist.md) pairs each rubric area with a demonstration. |
 
-Both roles can edit their profile, choose a theme, and manage notifications. Generate a one-time recovery code in **Settings** while signed in and save it somewhere safe.
+The two extra-credit features are **downloadable sales CSVs** and **rate limiting with audit logging**. Both database jobs passed on the application version used for this report. [MySQL 8.0 and MariaDB 10.11 test results](https://github.com/Gabbu69/Forma-Trade/actions/runs/46165671397)
+
+## Architecture
+
+The Bootstrap 5 interface uses vanilla JavaScript to fetch catalog and order data and Chart.js to plot sales. The PHP 8 backend handles authentication, validates requests, and reads and writes data through PDO. InnoDB saves purchase lines and deducts stock together. Each line retains the price and pack size accepted at checkout, so later catalog edits preserve the original order total. [SQL schema](backend/config/schema.sql) · [Demo seed](database_seed.sql)
 
 ## Run locally
 
-**Windows prerequisites** — PHP 8.1+ on PATH with PDO MySQL, mbstring, and GD with WebP support, plus a MariaDB distribution with the server and database initializer.
+On Windows, the default launcher requires PHP 8.1+ on PATH with PDO MySQL, mbstring, and GD with WebP support. Install MariaDB with its server and database initializer.
 
 1. Double-click **start.cmd**, or run it from the project folder.
 
@@ -65,31 +87,11 @@ On the sign-in page, open **Use a demo account** and select an account. The shar
 | Form Studio | Vendor | `form@forma.test` |
 | Field Objects | Vendor | `field@forma.test` |
 
-## Defense walkthrough
-
-1. **Shop as North Retail.** Filter the catalog, then add one pack each of the Studio Mechanical Keyboard and Arc Task Lamp. At seed prices the cart totals **₱13,500**.
-2. **Place one PO for two suppliers.** Sign in from the cart and check out. Note the PO number and the two supplier-specific statuses.
-3. **Fulfill as each vendor.** In **Orders**, search for the PO number. Mark each vendor’s portion in transit and then complete. Compare the daily or monthly chart with **Download CSV** for the same period.
-4. **Return as the buyer.** Open the shipment notifications, print the PO, and rate a completed item. Use **Buy Again** on PO-1001 to see how current prices and pack sizes are reviewed.
-
-Use the [defense checklist](docs/defense-checklist.md) for the rubric, last-pack race, and audit demonstration.
-
-## Architecture and documentation
-
-**PHP 8 · MariaDB/MySQL · Bootstrap 5 · Vanilla JavaScript · Chart.js**
-
-The PHP front controller applies session, role, and CSRF checks. PDO prepared statements and InnoDB transactions keep checkout, stock deductions, and supplier records consistent. Fetch updates the catalog, cart, order statuses, and charts during use.
-
-| Reference | What it covers |
-| --- | --- |
-| [Requirements](docs/requirements.md) | Workflows, business rules, and acceptance conditions |
-| [Data model and ER diagram](docs/data-model.md) | Accounts, catalog, orders, notifications, and audit records |
-| [API reference](docs/api.md) | Routes, roles, payloads, and responses |
-| [SQL schema](backend/config/schema.sql) and [demo seed](database_seed.sql) | Tables, constraints, and sample records |
-
-Local credentials, databases, and QA screenshots are excluded from Git. The demo bundles 18 product galleries and the libraries it needs to run offline.
+Both roles can edit their profile, choose a theme, and manage notifications. In **Settings**, a signed-in user can generate a one-time recovery code.
 
 ## Tests and audit log
+
+[![Forma Trade automated checks on main](https://github.com/Gabbu69/Forma-Trade/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/Gabbu69/Forma-Trade/actions/workflows/checks.yml)
 
 Start the local database first. **Python 3.10+** runs the API acceptance suite against an isolated test database.
 
