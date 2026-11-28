@@ -46,10 +46,32 @@ reorderModal.addEventListener("hidden.bs.modal", () =>
 
 function reorderLine(line) {
   const title = line.name || line.previous_name;
+  const badges = [];
+  if (line.price === null) {
+    badges.push(element("span", { class: "badge-pill text-danger" }, "Unavailable"));
+  } else {
+    if (line.price !== line.previous_price)
+      badges.push(element("span", { class: "badge-pill" }, "Price updated"));
+    if (line.pack_size !== line.previous_pack)
+      badges.push(element("span", { class: "badge-pill" }, "Pack size updated"));
+    if (!line.stock)
+      badges.push(element("span", { class: "badge-pill text-danger" }, "Sold out"));
+    else if (line.maximum < line.previous_quantity)
+      badges.push(element("span", { class: "badge-pill" }, "Stock limited"));
+    if (line.cart_quantity)
+      badges.push(
+        element("span", { class: "badge-pill role-badge-buyer" }, line.cart_quantity + " in cart"),
+      );
+  }
   const card = element(
     "article",
     { class: "repeat-line", "data-line": line.line_id },
-    element("h4", {}, title),
+    element(
+      "div",
+      { class: "repeat-line-head" },
+      element("h4", {}, title),
+      badges.length ? element("div", { class: "repeat-badges" }, ...badges) : null,
+    ),
     element(
       "p",
       { class: "muted" },
@@ -88,9 +110,15 @@ function reorderLine(line) {
     if (!line.stock) messages.push("Sold out.");
     else if (line.maximum < line.previous_quantity)
       messages.push(
-        "You can add " + packs(line.maximum) + ". " +
-          (line.stock > 9999 ? "Cart limit: 9,999 packs per item." : packs(line.stock) + " in stock.") +
-          (line.cart_quantity ? " Already in cart: " + packs(line.cart_quantity) + "." : ""),
+        "You can add " +
+          packs(line.maximum) +
+          ". " +
+          (line.stock > 9999
+            ? "Cart limit: 9,999 packs per item."
+            : packs(line.stock) + " in stock.") +
+          (line.cart_quantity
+            ? " Already in cart: " + packs(line.cart_quantity) + "."
+            : ""),
       );
   }
   if (line.changes.length) {
@@ -114,6 +142,7 @@ function reorderLine(line) {
     card.append(element("p", { class: "repeat-warning" }, messages.join(" ")));
   const input = element("input", {
     id: "repeat-qty-" + line.line_id,
+    class: "form-control",
     type: "number",
     min: 0,
     max: line.maximum,
