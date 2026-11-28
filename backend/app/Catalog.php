@@ -13,8 +13,16 @@ final class Catalog {
         foreach (['category'=>'p.category_id','vendor'=>'p.vendor_id','min'=>'p.price >=','max'=>'p.price <=','rating'=>'COALESCE(r.rating,0) >='] as $key=>$column) {
             $v=$filters[$key]??'';
             if ($v==='') continue;
+            if ($key === 'rating' && (!is_numeric($v) || (float)$v < 0 || (float)$v > 5)) {
+                reject(422, 'Minimum rating must be between 0 and 5 stars.');
+            }
             if (!is_scalar($v)||!is_numeric($v)||(float)$v<0 || (float)$v>99999999) reject(422,'Choose a valid filter value.');
             $where[]=$column.(in_array($key,['category','vendor'],true)?' = ?':' ?'); $args[]=$v;
+        }
+        $min = $filters['min'] ?? '';
+        $max = $filters['max'] ?? '';
+        if ($min !== '' && $max !== '' && (float)$min > (float)$max) {
+            reject(422, 'Minimum price must be at or below maximum price.');
         }
         if (($filters['stock']??'')==='1') $where[]='p.stock>0';
         $sort=match($filters['sort']??'') {'price'=>'p.price,p.id','high'=>'p.price DESC,p.id','name'=>'p.name,p.id',default=>'p.id'};

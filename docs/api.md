@@ -6,7 +6,7 @@ Sign-in, registration, password reset, password change, and recovery code genera
 
 | Method and path | Caller | Request and response |
 | --- | --- | --- |
-| GET catalog | Public | Optional q, category, vendor, min, max, rating, stock=1, sort=price/high/name. Returns matching products with supplier, category, average rating, pack price and stock. Returns the cover key in `image` and gallery keys in `images` in display order. See photo URLs below. |
+| GET catalog | Public | Optional q, category, vendor, min, max, rating, stock=1, sort=price/high/name. Rating is a minimum from 0 to 5 inclusive. If both price bounds are set, min must be at or below max. Invalid ranges return HTTP 422. Returns matching products with supplier, category, average rating, pack price and stock. Returns the cover key in `image` and gallery keys in `images` in display order. See photo URLs below. |
 | POST login | Public | email, password. Returns id, name, email, role. |
 | POST register | Guest | name, email, new_password, confirm_password, role (buyer or vendor). Creates an account and signs it in. |
 | POST reset-password | Public | email, code, new_password, confirm_password. Consumes a valid one-time recovery code and revokes earlier sessions. |

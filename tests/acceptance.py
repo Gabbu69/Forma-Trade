@@ -1,4 +1,4 @@
-"""Run against two temporary PHP servers and a new private MariaDB schema."""
+"""Run against two temporary PHP servers and a new private MySQL or MariaDB schema."""
 import csv
 import concurrent.futures
 import http.cookiejar
@@ -84,6 +84,11 @@ def scenarios(urls):
     form.api("vendor/products",{**product,"price":-1},status=422)
     buyer.api("cart",{"id":1,"quantity":-1},status=422)
     assert len(buyer.api("catalog?category=2&min=4000&max=5000&rating=5"))==1
+    assert "Minimum price" in buyer.api("catalog?min=5000&max=1000", status=422)["error"]
+    for rating in ("6", "-1", "bad"):
+        assert "rating" in buyer.api("catalog?rating=" + rating, status=422)["error"]
+    assert buyer.api("catalog?min=4600&max=4600&rating=4.5")
+    assert buyer.api("catalog?min=0&max=0&rating=0") == []
     print("PASS role access, CSRF, ownership, validation, catalog filters")
     baseline=[[revenue(v),revenue(v,"month")] for v in vendors]
     buyer_unread = buyer.api("notifications")["unread"]

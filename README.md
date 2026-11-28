@@ -105,7 +105,7 @@ $env:NODE_PATH = (Resolve-Path .runtime/browser/node_modules).Path
 python tests/acceptance.py --browser
 ```
 
-Use `$env:FORMA_BROWSER = "chrome"` for installed Chrome. The suite checks 375, 768, and 1440 px viewports and saves screenshots in `.runtime/qa`. GitHub Actions runs syntax checks and the API suite on pull requests and pushes to `main`.
+Use `$env:FORMA_BROWSER = "chrome"` for installed Chrome. The suite checks 375, 768, and 1440 px viewports and saves screenshots in `.runtime/qa`. GitHub Actions runs syntax checks and the API suite on both MySQL 8.0 and MariaDB 10.11 for pull requests and pushes to `main`.
 
 View the latest 50 local security events with:
 

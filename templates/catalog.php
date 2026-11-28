@@ -17,7 +17,7 @@
   </ul>
 </div>
 <button type="button" class="secondary mobile-filter" data-bs-toggle="offcanvas" data-bs-target="#filters"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>Filters</span><span id="activeFilterCount" class="filter-count-pill" hidden aria-hidden="true"></span></button></div></div>
-<div class="catalog-layout"><aside id="filters" class="offcanvas-lg offcanvas-start" tabindex="-1" aria-labelledby="filtersTitle"><div class="filter-inner">
+<div class="row g-0 align-items-start"><aside id="filters" class="col-lg-3 col-xl-2 pe-lg-3 offcanvas-lg offcanvas-start" tabindex="-1" aria-labelledby="filtersTitle"><div class="filter-inner">
 <div class="filters-title"><h3 id="filtersTitle"><i data-lucide="sliders-horizontal" aria-hidden="true"></i> Filters</h3><button type="button" id="reset" class="text-action">Reset</button><button type="button" class="btn-close d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#filters" aria-label="Close filters"></button></div>
 <form id="filterForm"><fieldset><legend>Category</legend>
 <?php foreach(array_merge([['id'=>'','name'=>'All products']],$categories) as $c):?><label class="category"><input type="radio" name="category" value="<?=h($c['id'])?>" <?=$c['id']===''?'checked':''?>><i data-lucide="<?=h([''=>'layout-grid',1=>'layers',2=>'keyboard',3=>'lamp-desk'][$c['id']]??'box')?>" aria-hidden="true"></i><span><?=h($c['name'])?></span></label><?php endforeach;?></fieldset>
@@ -26,7 +26,7 @@
 <fieldset><legend>Rating</legend><select class="form-select" name="rating" aria-label="Minimum rating"><option value="">Any rating</option><option value="4">4 stars and up</option><option value="4.5">4.5 stars and up</option><option value="5">5 stars</option></select></fieldset>
 <label class="stock-filter"><input class="form-check-input" name="stock" type="checkbox" value="1"> In stock only</label></form>
 <button type="button" class="primary d-lg-none w-100 mt-3" data-bs-dismiss="offcanvas" data-bs-target="#filters">Show products</button></div></aside>
-<div class="catalog-results">
+<div class="col-12 col-lg-9 col-xl-10 catalog-results">
   <div id="activeFilters" class="active-filters" hidden aria-label="Active filters"></div>
   <div id="products" class="product-grid" aria-label="Products">
     <?php for ($i = 0; $i < 6; $i++): ?>
